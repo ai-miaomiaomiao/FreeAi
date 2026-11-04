@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FREE_AI</title>
+
+<!-- PWA：Chrome 认下这个清单之后，地址栏右侧会出现「安装」，
+     装完就是一个**没有地址栏、没有书签栏**的独立窗口（display: standalone），
+     有自己任务栏图标，Alt+Tab 里也是单独一项 —— 跟"Chrome 应用"一样。
+     图标是运行时生成的（见 src/app_icons.py），仓库里没有二进制文件。 -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#14171c">
+<meta name="application-name" content="FREE_AI">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FREE_AI">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- 样式和脚本都拆到 src/html/ 下了，这个文件只留结构：
+     改样式去 html/style.css，改逻辑去 html/js/*.js（按文件名前缀的顺序加载）。 -->
+<link rel="stylesheet" href="/html/style.css">
+</head>
+<body>
+
+<!-- 登录 -->
+<div class="login-layer" id="loginLayer">
+  <form class="login-card" id="loginForm">
+    <h1>FREE_AI</h1>
+    <p>请输入访问密码</p>
+    <input type="password" id="pwd" placeholder="密码" autocomplete="current-password">
+    <button type="submit" id="loginBtn">进入</button>
+    <div class="login-err" id="loginErr"></div>
+  </form>
+</div>
+
+<!-- 主界面 -->
+<div class="app hidden" id="app">
+  <header class="topbar">
+    <span class="brand">FREE_AI</span>
+    <!-- 工作区：一格一个，当前那个高亮。
+         点标签 = 切过去（会话 / 工作区记忆跟着走）；右键 = 换目录 / 移除；
+         ＋ = 选一个新目录直接切过去。 -->
+    <div class="ws-tabs" id="wsTabs"></div>
+    <button class="tbtn mini" id="wsAdd" title="切换到另一个工作区…">＋</button>
+    <span class="spacer"></span>
+    <!-- 模型是全局的：换工作区不会变 -->
+    <select class="tbtn" id="modelSel" title="切换模型（全局，所有工作区共用）"></select>
+    <button class="tbtn" id="boardBtn" title="TASKS（工作空间任务台，新窗口）：所有工作区的会话和终端，能看能跑能停">⧉ TASKS</button>
+    <button class="tbtn" id="sessBtn" title="会话管理（当前工作区的 .ai/sessions.json）">会话</button>
+    <button class="tbtn" id="memBtn" title="长期记忆：全局记忆 + 工作区记忆（后者跟当前工作区走）">记忆</button>
+    <button class="tbtn" id="wxBtn" title="微信助理（全局，与工作区无关）">助理</button>
+    <button class="tbtn" id="restartBtn" title="重启服务（执行项目根目录的 start.bat）">⟳ 重启</button>
+  </header>
+
+  <div class="main">
+    <!-- 活动栏：每个功能一个入口，点一下换左栏内容 -->
+    <nav class="activity" id="activity">
+      <button class="act on" data-view="files" title="文件">📁</button>
+      <!-- 插件视图按钮（🔍⎇📱📋🐘▶…）由 50-views.js 的 applyPluginViews() 动态建，
+           需要插件在 __init__.py 里声明 VIEWS 才会出现（图标 / 标题 / after 顺序都从那儿来）。
+           插在 spacer 之前，所以顺序完全由 DOM 决定、天然在「上面」。
+           插件被禁用时那段代码根本不 import，它的 VIEWS 读不到，按钮自然不出现。
+           ⚠️ 别再往这里写死 data-view：以前 ⎇（svn）、🔍（code_search）、▶（launcher）
+           都是写死的，结果禁用插件后按钮还在、点开全 404。 -->
+      <span class="spacer"></span>
+      <!-- 底部只留一个 ⚙：任务 / 工具 / 插件 / 错误收进菜单里。
+           图标一排越加越长，而这几项都是"偶尔看一眼"的，合并后更容易找。 -->
+      <button class="act" id="setView" title="设置：任务 / 工具 / 插件 / 最近错误">⚙<span class="badge hidden" id="taskBadge"></span></button>
+    </nav>
+
+    <!-- 左：随活动栏切换的面板 -->
+    <aside class="panel panel-files" id="filesPanel">
+      <div class="panel-head">
+        <span class="panel-title" id="panelTitle">文件</span>
+        <span class="spacer"></span>
+        <button id="filesToggle" title="折叠 / 展开">‹</button>
+      </div>
+      <div class="panel-body">
+
+        <div class="view" id="viewFiles">
+          <!-- 只画**当前工作区**这一棵。别的工作区在顶部那排标签上，
+               点一下切过去 —— 两棵目录树叠在一栏里分不清哪个是哪个。 -->
+          <div class="view-bar">
+            <span id="treeRoot" style="font-size:11px;color:var(--muted)">文件</span>
+            <span class="spacer"></span>
+            <button class="tbtn mini" id="treeAdd" title="新建文件 / 新建文件夹（建在活动根下；要在别的目录建，对着那个目录右键）">＋</button>
+            <button class="tbtn mini" id="treeHidden" title="显示 / 隐藏以 . 开头的文件和目录（.ai、.git 那些）">.*</button>
+            <button class="tbtn mini" id="treeLocate" title="定位到当前打开的文件（在树里展开并选中）">◎</button>
+            <button class="tbtn mini" id="treeFindBtn"
+                    title="在当前已展开的文件树里快速跳转（也可以直接敲字母：点完文件后按 tb 就跳到 tb 开头的项）">⌕</button>
+            <button class="tbtn mini" id="treeRefresh" title="刷新文件树">↻</button>
+            <button class="tbtn mini" id="treeTop" title="折叠全部目录">⌃</button>
+          </div>
+          <!-- 快速跳转条：只在用的时候出现（默认 hidden），别占掉文件树的高度。
+               它**只筛已经挂在 DOM 里、且当前看得见**的节点 —— 折起来的目录不参与，
+               也不问后端，所以敲一个字母不会有任何磁盘 / SSH 开销。 -->
+          <div class="view-bar hidden" id="treeFindBar">
+            <span style="font-size:12px;color:var(--muted)">⌕</span>
+            <input type="text" class="grow" id="treeFindInput"
+                   placeholder="在已展开的文件树里跳转（Enter 下一个，Esc 退出）">
+            <span id="treeFindCount" style="font-size:11px;color:var(--muted)"></span>
+            <button class="tbtn mini" id="treeFindUp" title="上一项（Shift+Enter）">↑</button>
+            <button class="tbtn mini" id="treeFindDown" title="下一项（Enter）">↓</button>
+            <button class="tbtn mini" id="treeFindX" title="退出跳转（Esc）">×</button>
+          </div>
+          <div class="tree" id="tree"></div>
+        </div>
+
+        <div class="view hidden" id="viewSearch">
+          <div class="view-bar">
+            <input type="text" class="grow" id="findInput" placeholder="要搜索的文本，如 APK_INSTALL">
+            <button class="tbtn mini" id="findGo">查</button>
+            <button class="tbtn mini hidden" id="findStop"
+                    title="停止当前搜索（大工程扫一遍要十几秒）">停止</button>
+          </div>
+          <div class="view-bar" style="border-top:none;padding-top:0">
+            <!-- 默认「文本搜索」：日常用的是搜一段字，不是查符号。
+                 这里靠 HTML 的 selected 决定默认值，没有 JS 写死，也不做持久化
+                 —— 刷新回到默认是刻意的（要的是"默认值"不是"记住上次"）。 -->
+            <select id="findMode">
+              <option value="text" selected>文本搜索</option>
+              <option value="both">定义 + 引用</option>
+              <option value="definitions">只看定义</option>
+              <option value="references">只看引用</option>
+              <option value="folders">文件夹模式</option>
+            </select>
+            <!-- 三个开关：默认 cC（忽略大小写）和 word（整词）是开的，.* 关 -->
+            <div class="seg" id="findToggles" style="display:flex;gap:4px;flex-shrink:0">
+              <button class="tbtn mini" id="findRe"
+                      title="正则表达式：把输入按正则解释（支持 .* | 分组），默认只当符号名">.*</button>
+              <button class="tbtn mini on" id="findCi"
+                      title="忽略大小写（取消则区分大小写）">cC</button>
+              <button class="tbtn mini on" id="findWord"
+                      title="整词匹配（取消则子串也能命中）">word</button>
+            </div>
+            <span class="flabel" id="findInLabel" title="搜索范围">范围内</span>
+            <button class="tbtn mini hidden" id="findScopeClear" title="回到整个工作区">×</button>
+          </div>
+          <!-- 包含/排除：文本搜索和文件夹模式都能用（VS Code 的两个框） -->
+          <div class="view-bar hidden" style="border-top:none;padding-top:0;gap:8px"
+               id="findFileOpts">
+            <input type="text" class="grow" id="findInclude" placeholder="包含：device,*.kt" title="只搜这些文件/目录：逗号分隔，多个是“或”。填目录名（device）= 只搜它下面；只想搜某个目录里的某种文件，写成一个 glob：device/**/*.kt。留空 = 全部">
+            <input type="text" class="grow" id="findExclude" placeholder="排除：out,*.c" title="不搜这些文件/目录：逗号分隔。填目录名 = 整棵跳过（out / build / target 默认已跳过）">
+          </div>
+          <div class="view-scroll" id="findResults">
+            <div class="view-empty">输入符号名后回车<br><br>
+              快捷方式：编辑器里 <b>F12</b> 或 <b>Ctrl+左键</b><br>
+              光标在引用处 → 跳定义；在定义处 → 查引用<br><br>
+              文件树里右键目录 → <b>在当前文件夹搜索</b><br>
+              模式里选 <b>文件夹模式</b> 按目录折叠、<b>文本搜索</b> 搜任意内容</div>
+          </div>
+        </div>
+
+        <!-- 依赖表（🕸）：Gradle 模块 / src 根 / 模块间依赖边。
+             内容全部由 code_search/web/deps.js 生成；插件被禁用时活动栏没有
+             🕸 入口，这个空壳不会被切到。 -->
+        <div class="view hidden" id="viewDeps">
+          <div class="view-bar">
+            <span id="depsSummary" style="font-size:11px;color:var(--muted)">未加载</span>
+            <span class="spacer"></span>
+            <button class="tbtn mini" id="depsRefresh"
+                    title="重建依赖表：重新扫整棵树的 gradle 脚本（同步执行，大工程要几秒）">↻ 重建</button>
+          </div>
+          <div class="view-scroll" id="depsList"></div>
+        </div>
+
+        <div class="view hidden" id="viewSvn">
+          <div class="view-bar">
+            <span id="svnSummary" style="font-size:11px;color:var(--muted)">未加载</span>
+            <span class="spacer"></span>
+            <button class="tbtn mini" id="svnCommit" title="提交改动">⇧ 提交</button>
+            <button class="tbtn mini" id="svnUpdate" title="svn update（拉取仓库更新）">↓</button>
+            <!-- 维护类动作收成一个菜单：cleanup / 扫描未纳入版本 / 清理 /
+                 撤销全部。并排四个按钮在窄窗口下会挤掉后面的按钮，而且
+                 「撤」是不可恢复的，跟「清」只差一个字，太容易点错。 -->
+            <button class="tbtn mini" id="svnMaintain" title="维护：cleanup / 扫描与清理未纳入版本 / 撤销全部改动">维护…</button>
+            <!-- 「自动」只管后台触发；打开视图那一次是必定刷的（见 svn.js 的
+                 refreshSvnOnShow），所以关掉它也不影响点进来看到最新改动。 -->
+            <button class="tbtn mini" id="svnAuto" title="自动刷新：保存文件 / 窗口回到前台时重扫（打开本视图时总会刷一次）">自动</button>
+            <button class="tbtn mini" id="svnOpts" title="显示选项：是否显示未纳入版本 / 已忽略，自定义排除目录">⚙</button>
+            <button class="tbtn mini" id="svnRefresh" title="刷新">↻</button>
+          </div>
+          <div class="view-scroll" id="svnList">
+            <div class="view-empty">点 ↻ 读取本地改动<br><br>
+              右键条目：纳入版本控制 / 撤销改动 / 忽略 / 移出版本控制</div>
+          </div>
+        </div>
+
+        <div class="view hidden" id="viewDevice">
+          <div class="view-bar">
+            <!-- value 必须显式写空：不写的话 option.value 就等于它的文字，
+                 "加载中…" 会被当成设备序列号发给后端 → 「没有可用设备」 -->
+            <select id="devSel" style="flex:1"><option value="">（还没枚举设备）</option></select>
+            <button class="tbtn mini" id="devScrcpy" title="投屏（scrcpy）—— 窗口开在跑后端的机器上">投屏</button>
+            <button class="tbtn mini" id="devRoot" title="adb root + adb remount（改系统分区前要）">提权</button>
+            <button class="tbtn mini" id="devRefresh" title="刷新设备">↻</button>
+          </div>
+          <div class="view-bar" style="border-top:none;padding-top:0">
+            <input type="text" class="grow" id="devPath" value="/" placeholder="设备路径">
+            <button class="tbtn mini" id="devGo">进入</button>
+            <button class="tbtn mini" id="devMkdir" title="在当前目录新建文件夹">＋</button>
+          </div>
+          <div class="view-scroll" id="devList">
+            <div class="view-empty">选设备后浏览它的文件<br>
+              文本文件点开就能改，<b>保存即写回设备</b><br>
+              右键条目可改名 / 删除 / 看属性 / 推送 / 下载</div>
+          </div>
+        </div>
+
+        <div class="view hidden" id="viewLog">
+          <!-- 左栏是**侧边栏**：设备 / 操作 / 进程列表。
+               日志本体开在**编辑区**（原版也是这么分的 —— 活动的 webview panel
+               占编辑器那一栏，侧边栏只是入口和清单）。
+               过滤条件也不在这儿，在编辑区面板的工具栏上。 -->
+          <div class="view-bar">
+            <span id="logSideState" style="font-size:11px;color:var(--muted)">未启动</span>
+            <span class="spacer"></span>
+            <button class="tbtn mini" id="logOpen" title="在编辑区打开 Logcat 面板">▷</button>
+            <button class="tbtn mini" id="logSideToggle" title="启动 / 停止常驻抓取">■</button>
+          </div>
+          <div class="view-scroll" id="logSide">
+            <div class="view-empty">正在读取设备…</div>
+          </div>
+        </div>
+
+        <div class="view hidden" id="viewGradle">
+          <!-- 顶部三行：设备 / JDK / 过滤。状态（枚举失败、JDK 不存在）挂在
+               对应那行下面，别只塞进 select 的 title —— 那得悬停才看得见。 -->
+          <div class="view-bar">
+            <span class="flabel">设备</span>
+            <select id="gradleDev" style="flex:1"><option value="">自动</option></select>
+            <button class="tbtn mini" id="gradleDevRefresh" title="重新枚举 adb 设备">↻</button>
+          </div>
+          <div class="g-note hidden" id="gradleDevNote"></div>
+          <div class="view-bar" style="border-top:none;padding-top:0">
+            <span class="flabel">JDK</span>
+            <select id="gradleJdk" style="flex:1"><option value="">默认</option></select>
+            <button class="tbtn mini" id="gradleJdkPick"
+                    title="在文件夹里选一份 JDK（候选列表里没有的也行）">📁</button>
+          </div>
+          <div class="g-note hidden" id="gradleJdkNote"></div>
+          <div class="view-bar" style="border-top:none;padding-top:0">
+            <input type="text" class="grow" id="gradleFilter" placeholder="过滤任务名">
+            <button class="tbtn mini hidden" id="gradleRunSel"
+                    title="把 Ctrl+点击勾上的任务各开一个终端并行跑">▶ 运行选中的</button>
+            <button class="tbtn mini" id="gradleRefresh" title="重新问 Gradle 要列表（慢）">↻</button>
+          </div>
+          <div class="view-scroll" id="gradleList"></div>
+        </div>
+
+        <!-- 「最近运行过的脚本」视图。launcher 插件现在**不声明** VIEWS（活动栏
+             不再有 ▶ 图标，因为没人用），所以这块面板暂时进不去；DOM 留着是为了
+             插件以后想恢复入口时改一行就行（script.js 的 initScriptView 依赖它）。 -->
+        <div class="view hidden" id="viewScript">
+          <div class="view-bar">
+            <span style="font-size:11px;color:var(--muted)">最近运行过的脚本</span>
+            <span class="spacer"></span>
+            <button class="tbtn mini" id="scriptRefresh" title="刷新">↻</button>
+          </div>
+          <div class="view-scroll" id="scriptList">
+            <div class="view-empty">还没有记录</div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- 文件栏右边缘：拖动调宽（双击复位） -->
+    <div class="panel-resize" id="resizeFiles" title="拖动调整文件栏宽度（双击复位）"></div>
+
+    <!-- 中：编辑器（Logcat 面板也开在这里 —— 原版是 ViewColumn.One 的 webview panel） -->
+    <section class="panel panel-editor" id="editorPanel">
+      <div class="panel-head">
+        <span class="panel-title" id="editorTitle">编辑器</span>
+        <!-- 跳转历史：跳完定义 / 日志源位置之后回得来（VS Code 那对箭头）。
+             没得后退时是禁用的 —— 那个灰状态本身就是"这里能不能退"的提示。 -->
+        <button class="tbtn mini" id="edBack" title="后退（Alt+←）" disabled>←</button>
+        <button class="tbtn mini" id="edForward" title="前进（Alt+→）" disabled>→</button>
+        <span class="spacer"></span>
+        <!-- 底栏信息：编码 / 换行风格，点一下就能切（保存时按它写回） -->
+        <span class="ed-info" id="edInfo"></span>
+        <span class="ed-status" id="edStatus"></span>
+        <!-- 编辑器顶栏的动作按钮（▶ 运行 / 预览 …）**不写死在这里**：
+             由插件在 ACTIONS 里申请，applyEditorActions() 照着建。
+             以前 ▶ 和 预览 是静态按钮，插件禁用了还得在前端各处补判断。 -->
+      </div>
+      <div class="panel-body">
+        <div class="ed-tabs" id="edTabs"></div>
+        <div class="ed-stack hidden" id="edStack">
+          <!-- 行号槽：和 edHl 同步滚动的一张纯文本 pre。
+               不放进 edHl 里面 —— 那里的 innerHTML 是重新拼的，塞行号会跟着被刷掉；
+               独立一层则只需在正文变化时整体重写 textContent（一次节点替换，很便宜）。 -->
+          <pre class="ed-gutter" id="edGutter" aria-hidden="true"></pre>
+          <pre class="ed-hl" id="edHl" aria-hidden="true"><code id="edHlCode"></code></pre>
+          <textarea class="ed-area" id="edArea" spellcheck="false"></textarea>
+          <!-- 补全候选（autoCode）：位置由 JS 摆在光标右下角，见「编辑器补全」 -->
+          <div class="ed-complete hidden" id="edComplete"></div>
+          <!-- 按住 Ctrl 时给光标下的符号画一条下划线（提示"这里能点"） -->
+          <div class="ed-goto-mark hidden" id="edGotoMark"></div>
+          <!-- 转到定义 / 查引用：多条结果时的 peek 浮层（对应 VS Code 的 peek）。
+               外面这层是半黑遮罩：铺满视口、用 flex 把框居中，点遮罩空白处关闭。
+               不用 left:50% + translate(-50%,-50%) 居中 —— 那个和框上的 resize:both
+               会打架：用户拖右下角时浏览器改的是 width/height，而居中靠 translate
+               补偿，一拖框就整体偏一下。 -->
+          <div class="ed-peek-mask hidden" id="edPeekMask">
+            <div class="ed-peek hidden" id="edPeek"></div>
+          </div>
+          <!-- 查找的「当前命中」色块：焦点在查找框里时，浏览器不画 textarea 的选区，
+               补一层色，否则按 Enter 只有数字在变、画面没有任何反馈（见 efMarkPaint） -->
+          <div class="ed-find-mark hidden" id="edFindMark" aria-hidden="true"></div>
+          <!-- 查找 / 替换（Ctrl+F / Ctrl+H）：浮在编辑区右上角 -->
+          <div class="ed-find hidden" id="edFind">
+            <div class="ef-row">
+              <input id="efQuery" type="text" placeholder="查找" autocomplete="off" spellcheck="false">
+              <button class="ef-opt" id="efCase" title="区分大小写">Aa</button>
+              <button class="ef-opt" id="efWord" title="全词匹配">ab</button>
+              <button class="ef-opt" id="efRegex" title="正则表达式">.*</button>
+              <span class="ef-count" id="efCount">0/0</span>
+              <button class="ef-btn" id="efPrev" title="上一个（Shift+Enter）">↑</button>
+              <button class="ef-btn" id="efNext" title="下一个（Enter）">↓</button>
+              <button class="ef-btn" id="efClose" title="关闭（Esc）">×</button>
+            </div>
+            <div class="ef-row hidden" id="efReplRow">
+              <input id="efReplace" type="text" placeholder="替换为" autocomplete="off" spellcheck="false">
+              <button class="ef-btn" id="efReplaceOne" title="替换当前这一处">替换</button>
+              <button class="ef-btn" id="efReplaceAll" title="替换全部">全部替换</button>
+            </div>
+          </div>
+        </div>
+        <div class="md-view hidden" id="edPreviewBox"></div>
+
+        <!-- 对比面板：SVN 等插件把「仓库版本 ↔ 本地」画在这里（不是弹窗）。
+             跟 Logcat 一样占住编辑区，标签条上有一个格子，点别的文件就切走。 -->
+        <div class="ed-diff hidden" id="edDiffView"></div>
+
+        <!-- Logcat 面板本体：占住编辑区（像原版那个 webview panel）。
+             收起时工具栏就一行 —— 面板大部分时间该留给日志，
+             条件是"调完就不动"的东西。 -->
+        <div class="logcat-view hidden" id="logcatView">
+          <div class="logcat-bar">
+            <button class="tbtn mini" id="logDevPick" title="换设备">设备</button>
+            <button class="tbtn mini" id="logLive" title="启动 / 停止常驻抓取">● 实时</button>
+            <input type="text" id="logPackage" placeholder="包名" title="只看某个应用（PID→包名反查）">
+            <input type="text" id="logTag" placeholder="Tag">
+            <input type="text" id="logMsg" placeholder="内容">
+            <button class="tbtn mini" id="logPickPkg" title="从设备包名列表里挑">＋</button>
+            <button class="tbtn mini" id="logTail" title="跳到最新一条并恢复自动滚动">↓</button>
+            <span class="spacer"></span>
+            <!-- 导出、独立窗口放在**常显**这排，不进「▼」折叠区：这两种都是
+                 "偶尔用一次、但要用的那一刻就得找得到"，藏一层等于没有 -->
+            <button class="tbtn mini" id="logDetach"
+              title="在独立窗口打开 Logcat（可以拖到第二块屏幕；启动/过滤仍由主窗口控制；编辑区这个标签会自动收掉）">⧉ 独立</button>
+            <button class="tbtn mini" id="logExport"
+              title="导出当前过滤结果：选一个目录存盘，然后在编辑器里打开">导出</button>
+            <button class="tbtn mini" id="logMore" title="展开 / 收起更多条件">▼</button>
+          </div>
+
+          <div class="logcat-bar wrap hidden" id="logMoreBox">
+            <span style="font-size:11px;color:var(--muted)">级别</span>
+            <span id="logLevels"></span>
+            <input type="text" id="logTagEx" placeholder="Tag 不含" title="多个用逗号分隔，之间是「或」">
+            <input type="text" id="logMsgEx" placeholder="内容不含">
+            <input type="text" id="logPid" placeholder="PID" style="width:58px">
+            <label class="lgchk"><input type="checkbox" id="logRegex"> 正则</label>
+            <label class="lgchk"><input type="checkbox" id="logCase"> 大小写</label>
+            <label class="lgchk"><input type="checkbox" id="logMarkers" checked> 标记行</label>
+            <label class="lgchk"><input type="checkbox" id="logStrict" checked
+              title="勾着时，PID→包名查不出包名的行（内核 / 驱动日志）会被挡掉"> 只看选中包</label>
+            <span class="spacer"></span>
+            <button class="tbtn mini" id="logProcs" title="刷新 PID↔包名 + 覆盖写 ps.txt">⟳ 进程</button>
+            <button class="tbtn mini" id="logPause" title="暂停面板刷新（后台照收，恢复后补齐）">暂停</button>
+            <button class="tbtn mini" id="logData" title="落盘文件：current.log / ps.txt / snapshot.json / state.json / filter.log">数据</button>
+            <button class="tbtn mini" id="logClearDev" title="清空设备日志缓冲（adb logcat -c）">清设备</button>
+            <button class="tbtn mini" id="logClear" title="清空本地缓冲与面板（设备缓冲和 current.log 不动）">清空</button>
+          </div>
+
+          <!-- 日志区。三个绝对定位的层（顺序有意义）：
+                 #logSpacer 只负责把滚动条撑够长
+                 #logRows  视口里那几十行，y = 下标 × 行高
+                 #logHint  空态；#logTail 内容比视口短时那句说明 -->
+          <div class="view-scroll" id="logList" tabindex="0">
+            <div id="logSpacer"></div>
+            <div id="logRows"></div>
+            <div class="view-empty" id="logHint"></div>
+            <div class="tail-note hidden" id="logTailNote"></div>
+          </div>
+          <div class="logcat-status" id="logSummary">未启动</div>
+        </div>
+
+        <div class="ed-empty" id="edEmpty">
+          <div>点左侧文件，就在这里编辑</div>
+          <div style="font-size:12px">停止输入 1 秒自动保存</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 会话栏左边缘：拖动调宽（双击复位）。
+         显隐由 37-detached.js 的 boardSyncButton 控制：任务台窗口开着时让位
+         （会话都在那边），关掉就回来。 -->
+    <div class="panel-resize" id="resizeChat" title="拖动调整会话栏宽度（双击复位）"></div>
+
+    <!-- 右：会话 -->
+    <section class="panel panel-chat" id="chatPanel">
+      <div class="panel-head">
+        <span class="panel-title">会话</span>
+        <span class="spacer"></span>
+        <!-- 本地留痕：会话 / 压缩归档 / 改动记录都留在工作区 .ai 下。
+             界面**不提供删除**——要删就去文件夹删，避免手滑清空历史。 -->
+        <button id="traceBtn" title="本地留痕：会话、压缩归档、改动记录、命令审计都在工作区 .ai 里（可在这里直接定位）">留痕</button>
+        <button id="chatToggle" title="折叠 / 展开">›</button>
+      </div>
+      <div class="panel-body">
+        <!-- 多标签页：每个会话一个标签，各自有独立的消息区和输入框 -->
+        <div class="sess-tabs" id="sessTabs"></div>
+        <div class="sess-panels" id="sessPanels"></div>
+        <!-- 思考框的停靠位：模型思考期间，正在流的那一块挪到这里 ——
+             钉在输入框上方，不跟着消息列表滚。思考一结束就归位回消息里
+             （见 30-chat.js 的 paintThinking / dockClear）。 -->
+        <div class="think-dock hidden" id="thinkDock"></div>
+        <!-- 底部输入区：所有标签共用这一套。按钮作用于「当前标签的会话」，
+             切标签不重建 DOM，所以输入到一半切走再切回来内容还在。 -->
+        <div class="composer">
+          <div class="composer-inner">
+            <!-- 智能体（模式）：按钮由 /api/modes 动态渲染，HTML 里不放死 ——
+                 加一个模式不用改这里。选择跟会话走（tab.agent）。 -->
+            <div class="modebar" id="modeBar"></div>
+            <div class="attn hidden" id="attn"></div>
+            <!-- 发送排队：生成中再按回车不会丢，排在这里等这一轮结束 -->
+            <div class="sendq hidden" id="sendQueue"></div>
+            <div class="inputrow">
+              <textarea id="input" rows="1" placeholder="输入消息，Enter 发送 / Shift+Enter 换行"></textarea>
+              <div class="sendcol">
+                <div class="sendcol-top">
+                  <button id="compactBtn" title="压缩上下文：早期对话摘要化（只影响当前会话）">压缩</button>
+                  <!-- 勾选式：勾上后点发送 = 先新建会话，再把这条消息发进去 -->
+                  <label class="sendchk" id="newSessWrap" title="勾上后，点发送会先新建一个会话并把这条消息发进去（发完自动取消勾选）">
+                    <input type="checkbox" id="newSessChk"><span>新会话</span>
+                  </label>
+                </div>
+                <button id="sendBtn">发送</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="term hidden" id="term">
+    <!-- 拖动条：上下拖调整终端高度，双击复位 -->
+    <div class="term-resize" id="termResize" title="拖动调整终端高度（双击复位）"></div>
+    <div class="term-head">
+      <!-- 标签条：每个标签页一份独立状态（工作目录、输出、正在跑的命令） -->
+      <div class="term-tabs" id="termTabs"></div>
+      <button id="termNew" title="新开一个终端（Ctrl+Shift+T）">+</button>
+      <span class="spacer"></span>
+      <span class="term-status" id="termStatus"></span>
+      <button id="termStop" class="hidden" title="停止当前命令（Ctrl+C）">■ 停止</button>
+      <button id="termClear" title="清屏（Ctrl+L）">清屏</button>
+      <button id="termClose" title="关闭">✕</button>
+    </div>
+    <div class="term-cwd" id="termCwdLabel" title="当前工作目录">工作目录 —</div>
+    <pre class="term-out" id="termOut"></pre>
+    <div class="term-in">
+      <!-- textarea 而不是 input：input 的 value 不含换行，粘贴多行命令时浏览器
+           会把换行剥掉、压成一条超长单行（后端本来就按行发，见 md/终端-多行命令与More续行.md）。
+           高度由 autoGrowBox 撑，回车执行、Shift+回车换行。 -->
+      <textarea id="termIn" rows="1" spellcheck="false" autocomplete="off"
+                placeholder="回车执行 · Shift+回车换行 · Tab 补全 · ↑↓ 历史 · Ctrl+L 清屏"></textarea>
+    </div>
+  </div>
+
+  <!-- 工作空间任务台 —— 只在独立窗口里出现（`/?detached=board`）。
+       主界面里它一直是 hidden：点顶栏「⧉ 任务台」会新开一个窗口。
+       为什么不嵌在主界面：另一个窗口拿不到本页内存里的会话流和终端输出，
+       只有走后端账本（/api/term/* 和 /api/chat/live）这一条路，那不如干脆
+       只保留窗口形态，别让人误以为主界面那份能看到全部后台任务。 -->
+  <section class="board hidden" id="board">
+    <aside class="bd-side">
+      <div class="bd-side-head">
+        <span class="bd-side-title">工作空间</span>
+        <!-- 只在独立任务台里出现（openDetachedBoard 去掉 hidden）：主界面那条
+             工作区列表走的是文件树标签，加远程空间得另走一套，见 37-detached.js -->
+        <button class="bd-x hidden" id="bdMain"
+                title="打开主界面（文件树 / 编辑器）">⌂</button>
+        <!-- 「＋」和主工作台口径一致：本地目录 / 远程 SSH 两条都在菜单里。
+             以前只有「＋ 远程」，想加个本地空间只能回主窗口。 -->
+        <button class="tbtn mini hidden" id="bdAddRemote"
+                title="添加工作区：本地目录 / 远程 SSH">＋</button>
+        <button class="bd-x" id="bdClose" title="关闭（Esc）">✕</button>
+      </div>
+      <div class="bd-list" id="bdList"></div>
+    </aside>
+    <div class="bd-main">
+      <div class="bd-head">
+        <span class="bd-title" id="bdTitle">—</span>
+        <span class="bd-status" id="bdStatus"></span>
+        <span class="spacer"></span>
+        <!-- 在主窗口文件树里定位这条会话的 md 归档目录（<工作区>/.ai/history）：
+             压缩掉的原文都按「时间-会话 id.md」存在那儿，界面只显示最近 200 条，
+             更早的和完整原文得去这个目录翻。路径由后端 /api/ai/traces 给，不自己拼；
+             主窗口没开时退化成系统资源管理器。 -->
+        <button class="tbtn mini hidden" id="bdReveal"
+                title="在主窗口的文件树里定位 md 归档目录（.ai/history）">md 目录</button>
+        <button class="tbtn mini hidden" id="bdStop">■ 停止</button>
+      </div>
+      <div class="bd-body">
+        <div class="bd-pane" id="bdChat"></div>
+        <div class="bd-pane hidden" id="bdTerm"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 任务中心：上传/下载的实时进度。默认隐藏，有任务才出现。
+       挂在 .main 下当浮层，而不是塞进会话面板里 —— 以前放在 .panel-body 内，
+       一旦把右栏折叠（.panel.collapsed .panel-body { display:none }），
+       正在上传的进度条就跟着整个消失，看起来像没反应。 -->
+  <div class="task-box hidden" id="taskBox"></div>
+</div>
+
+<!-- 通用弹窗 -->
+<div class="modal hidden" id="modal">
+  <div class="card" id="modalCard">
+    <div class="card-head">
+      <span id="modalTitle">标题</span>
+      <span class="spacer"></span>
+      <button id="modalClose">✕</button>
+    </div>
+    <div class="card-body" id="modalBody"></div>
+    <div class="card-foot hidden" id="modalFoot"></div>
+  </div>
+</div>
+
+<!-- 右键菜单 -->
+<div class="ctx hidden" id="ctx"></div>
+
+<script src="/html/js/00-core.js"></script>
+<script src="/html/js/10-login.js"></script>
+<script src="/html/js/20-workspace.js"></script>
+<script src="/html/js/25-tabs.js"></script>
+<script src="/html/js/30-chat.js"></script>
+<script src="/html/js/35-task.js"></script>
+<script src="/html/js/37-detached.js"></script>
+<script src="/html/js/40-tree.js"></script>
+<script src="/html/js/50-views.js"></script>
+<script src="/html/js/80-editor.js"></script>
+<script src="/html/js/85-editor-state.js"></script>
+<script src="/html/js/90-tools.js"></script>
+<script src="/html/js/91-checkin.js"></script>
+<script src="/html/js/92-memory.js"></script>
+<!-- IDE 配置（模型 / 网关 / 命令放行）：只往 #modalBody 里现建 DOM，
+     必须排在 90-tools.js 之后 —— 它要用 openModal / closeModal。 -->
+<script src="/html/js/95-config.js"></script>
+<script src="/html/js/99-boot.js"></script>
+</body>
+</html>

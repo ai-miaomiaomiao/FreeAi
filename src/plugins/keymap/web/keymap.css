@@ -1,0 +1,105 @@
+/* keymap 插件 · 配置界面样式
+ *
+ * 只用内核已有的 CSS 变量（--bg / --fg / --line / --acc 那套），
+ * 不引入新颜色 —— 换主题时这里会自动跟着变。
+ */
+
+#viewKeymap {
+  padding: 10px 10px 20px;
+  overflow: auto;
+}
+
+.km-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.km-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.km-btn {
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  border: 1px solid var(--line, #444);
+  background: transparent;
+  color: var(--fg, #ddd);
+  border-radius: 4px;
+}
+.km-btn:hover { border-color: var(--acc, #4a9eff); color: var(--acc, #4a9eff); }
+
+.km-hint {
+  font-size: 11px;
+  opacity: .6;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.km-list { display: flex; flex-direction: column; }
+
+/* 读配置失败 / 一个动作都没有时的提示。用错误色，别做成灰字——
+   灰字看起来像"正常的空状态"，用户会以为插件就这样设计的。 */
+.km-err {
+  font-size: 12px;
+  color: #e06c75;
+  line-height: 1.6;
+  padding: 6px 0;
+  word-break: break-all;
+}
+
+.km-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line, #333);
+}
+.km-row:last-child { border-bottom: 0; }
+
+.km-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 作用域角标：告诉用户这个键在哪儿才生效 */
+.km-scope {
+  display: block;
+  font-size: 10px;
+  opacity: .5;
+  margin-top: 1px;
+}
+
+.km-key {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border: 1px solid var(--line, #444);
+  background: transparent;
+  color: var(--fg, #ddd);
+  border-radius: 4px;
+  text-align: center;
+}
+.km-key:hover { border-color: var(--acc, #4a9eff); }
+
+/* 还是默认值：淡一点，让自定义过的一眼能看出来 */
+.km-key.is-default { opacity: .75; }
+
+/* 正在录制：醒目一点，避免用户以为按钮坏了 */
+.km-key.capturing {
+  border-color: var(--acc, #4a9eff);
+  color: var(--acc, #4a9eff);
+  outline: 2px solid var(--acc, #4a9eff);
+  outline-offset: 1px;
+}

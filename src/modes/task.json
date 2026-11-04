@@ -1,0 +1,84 @@
+{
+  "name": "任务",
+  "icon": "🛠",
+  "desc": "查证定方案 → 改代码验证 → 交付；不写设计文档（要文档用「设计」模式）",
+  "order": 20,
+  "flow": "task",
+  "tools": null,
+  "prompt": "你处于任务模式：查清现状再动手，只改这次该改的地方；这个模式不写设计文档（要文档用「设计」模式）。\n- 结论要有证据（文件:行号、命令输出），没看过就直说没看过，不要把推测写成结论。\n- 不顺带重构、不清理无关文件、不为了看起来完整造没人要的文件。",
+  "stages": [
+    {
+      "id": "scan",
+      "name": "查证定方案",
+      "need": "read",
+      "next": [
+        "apply",
+        "deliver"
+      ],
+      "tools": [
+        "list_dir",
+        "read_file",
+        "search_text",
+        "find_files",
+        "locate_symbol",
+        "diff_text",
+        "todo",
+        "ask_user",
+        "adb",
+        "find_symbol",
+        "image",
+        "web_search",
+        "fetch_url",
+        "remote_fetch",
+        "run_read",
+        "check_files"
+      ],
+      "prompt": "这一轮只读不改：先把现状查清，再定方案 —— 不动任何文件。\n## 先查现状\n- 这块现在长什么样：涉及哪几个模块 / 文件、各自的职责、调用关系、关键约束（线程、生命周期、兼容性）。\n- **这一步写不了文件**：工具表里只有 run_read（查看类命令），没有 write_file / edit_file，也没有 run_command。要看的东西用 read_file / search_text / list_dir / run_read 拿，结论写进 conclusion 交棒即可。\n- 版本库现状用 run_read 跑：`svn status`（谁改了什么）、`svn diff`（改成什么样）、`svn log -l 5`（最近提交）。add / commit / revert / update 会改工作副本，不跑。\n- 设备侧 / 线上问题先抓证据：adb 工具（devices / screen_shot + image / ui）。日志怎么落盘、哪个 action 会毁现场，见 adb 的工具描述。要人配合还想留过程证据，用 handoff 的 `capture` 参数（派活时起采，人点完成后框架自动收尾并灌回时间线）；不要用 run_read 拼 adb 命令，也别拼 for 循环。\n## 再定方案\n- 逐文件列出改动点：改哪个函数、接口怎么变、哪些调用处要跟着改。\n- **按这次改动的范围选下一步**：要改代码 → apply（改代码验证）；什么都不用动、只要给结论 → deliver。\n- conclusion 分三段写：现状（模块与文件清单，带行号）→ 根因（按确定性排序）→ 逐文件改动清单（含明确不动的部分及理由）。"
+    },
+    {
+      "id": "apply",
+      "name": "改代码验证",
+      "need": "work",
+      "next": [
+        "deliver",
+        "apply"
+      ],
+      "tools": [
+        "list_dir",
+        "read_file",
+        "search_text",
+        "find_files",
+        "locate_symbol",
+        "write_file",
+        "edit_file",
+        "run_command",
+        "diff_text",
+        "check_files",
+        "adb",
+        "gradle",
+        "find_symbol",
+        "image",
+        "svn",
+        "run_script",
+        "web_search",
+        "fetch_url",
+        "remote_fetch",
+        "remote_push"
+      ],
+      "prompt": "按上一步的方案改**业务代码**，改完**在本地编译通过**才算这一步做完。\n- 按清单落地；接口变化要同步所有调用处，别留半成品。\n- 改完就用 gradle 工具编译（Android 模块是 :模块名:compileDebugKotlin）：编译不过当场改、再编，直到通过。**编译必须在这一步收尾** —— 留到「交付」那步发现错误时，已经没有改代码的工具了。\n- 只跑编译这一条：单测 / 打包不要主动跑，用户要完整验证时会自己跑。编译跑不起来（没有插件、依赖拉不下来）就在结论里说明原因，别假装跑过。\n- 校验不用自己组织：edit_file 每次落盘都会自动校验，过/不过的结论就在写入返回里（没通过会把报错顶在最前面）。看到报错当场改；想整体再确认一遍再跑 check_files，不是必做动作。\n- **一轮干不完就 next 选 apply 再来一轮**：编译还红、又冒出新的关联问题、清单上的点一轮吃不下 —— 都是正常情况，选 apply 就是新的一轮（工具、交棒机会、实质动作闸门全部重新算满），不是重复上一轮。别为了赶收尾把没干完的硬塞进这一轮的 conclusion。\n- 确实不需要改代码时，在 conclusion 里写「无需改动：<原因>」，next 选 deliver。\n- conclusion 写清：实际改了哪些文件、每处改成了什么、接口怎么变的、编译跑了哪条命令、输出里关键的那几行是什么、结论是通过还是失败（失败写明哪个文件哪行 / 哪条报错对不上）、哪些地方跟原方案不一样（以及为什么）。"
+    },
+    {
+      "id": "deliver",
+      "name": "交付",
+      "next": [],
+      "tools": [
+        "list_dir",
+        "read_file",
+        "search_text",
+        "diff_text",
+        "check_files"
+      ],
+      "prompt": "这是最后一步，只做交付，不要再改任何文件，也不要编译：\n- 编译和修复是「改代码验证」那一步的事 —— 这一步没有编译工具。真发现问题就写进总结的「没做完 / 待确认」，不要在这里动手。\n- 这一步只有只读核对工具（read_file / search_text / diff_text / check_files / list_dir）：没有 adb、没有 handoff、没有 svn、没有编译。设备现象、时间线、版本库现状都以前面几步的结论为准，别在这里补抓一遍。\n- 除非核对某句结论必须看原文，否则不要重新读文件 —— 前面几步的结论已经够了，重复读只是白花钱。\n- 给用户一份能直接看懂的交付：改了哪几块（文件 + 关键位置）、为什么这么改（取舍）、还有什么没做或标了待办。没做的事别写成做完了。\n- 然后调用 finish_stage，conclusion 写这份总结，next 留空。"
+    }
+  ]
+}

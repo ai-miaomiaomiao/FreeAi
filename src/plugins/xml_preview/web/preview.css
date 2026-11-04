@@ -1,0 +1,186 @@
+/* XML / drawable 预览（xml_preview 插件）
+ *
+ * 全部用半透明灰做分隔线 / 底色：这个界面有深色和浅色两套主题，
+ * 写死 #ccc 那种在深色下会刺眼。rgba(128,128,128,.xx) 两边都过得去。
+ */
+
+.xp-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.xp-loading,
+.xp-error {
+  padding: 16px;
+  font-size: 12px;
+  opacity: .8;
+}
+.xp-error { color: #d05050; }
+
+/* ---- 顶部信息条 ---- */
+.xp-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(128, 128, 128, .28);
+  flex: 0 0 auto;
+}
+.xp-tag {
+  font-family: ui-monospace, Consolas, monospace;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(0, 122, 204, .16);
+  color: inherit;
+}
+.xp-dim { opacity: .6; font-size: 11px; }
+.xp-path { max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xp-ms { margin-left: auto; }
+.xp-approx {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  border: 1px solid rgba(215, 169, 0, .6);
+  color: #b58b00;
+  cursor: help;
+}
+
+/* 顶部条里的画像选择（密度 / 日夜）。继承字色，深浅主题都不用另配。 */
+.xp-sel {
+  font: inherit;
+  font-size: 11px;
+  color: inherit;
+  background: rgba(128, 128, 128, .12);
+  border: 1px solid rgba(128, 128, 128, .3);
+  border-radius: 3px;
+  padding: 1px 4px;
+  cursor: pointer;
+}
+.xp-sel option { color: #222; background: #fff; }
+
+/* ---- 状态芯片（selector / level-list）---- */
+.xp-states-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 10px 0;
+  flex: 0 0 auto;
+}
+.xp-chip {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: inherit;
+  background: rgba(128, 128, 128, .12);
+  border: 1px solid rgba(128, 128, 128, .3);
+}
+.xp-chip:hover { background: rgba(128, 128, 128, .22); }
+.xp-chip.on {
+  background: rgba(0, 122, 204, .22);
+  border-color: rgba(0, 122, 204, .7);
+}
+
+/* ---- 主体：左画布 + 右清单 ---- */
+.xp-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 10px;
+  padding: 10px;
+}
+.xp-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+/* 棋盘格：drawable 大量是半透明 / 只有描边，纯白底上根本看不出边界 */
+.xp-board {
+  padding: 18px;
+  border-radius: 4px;
+  background-image:
+    linear-gradient(45deg, rgba(128, 128, 128, .13) 25%, transparent 25%, transparent 75%, rgba(128, 128, 128, .13) 75%),
+    linear-gradient(45deg, rgba(128, 128, 128, .13) 25%, transparent 25%, transparent 75%, rgba(128, 128, 128, .13) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
+  border: 1px solid rgba(128, 128, 128, .25);
+}
+.xp-canvas { position: relative; }
+
+/* layout 画布：块级铺满，且**不居中** —— 真机竖屏画布比可视区高时，
+   居中会把顶部裁掉，滚也滚不到。左上对齐 + 外层滚动才对。 */
+.xp-canvas-layout { overflow: hidden; }
+.xp-stage:has(.xp-canvas-layout) {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+/* 鼠标指到哪个视图就框哪个 —— 只框最里面那层（:has 反向排除祖先）。 */
+.xp-v { cursor: pointer; }
+.xp-v:hover:not(:has(.xp-v:hover)) {
+  outline: 1px solid rgba(0, 122, 204, .85);
+  outline-offset: -1px;
+}
+
+/* ---- 右侧清单 ---- */
+.xp-side {
+  flex: 0 0 320px;
+  min-width: 0;
+  overflow: auto;
+  border-left: 1px solid rgba(128, 128, 128, .22);
+  padding-left: 10px;
+}
+.xp-sec {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: .75;
+  margin: 6px 0 4px;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.xp-empty { opacity: .5; font-size: 11px; padding: 4px 0 8px; }
+.xp-refs { display: flex; flex-direction: column; gap: 4px; }
+
+.xp-ref {
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(128, 128, 128, .08);
+  border-left: 2px solid rgba(128, 128, 128, .45);
+}
+.xp-ref.ok { border-left-color: #37a24a; }
+.xp-ref.bad { border-left-color: #d05050; }
+.xp-ref-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.xp-raw {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+.xp-ref-attr { font-size: 11px; opacity: .7; word-break: break-all; }
+.xp-ref-note { font-size: 11px; opacity: .65; word-break: break-all; }
+.xp-ref.bad .xp-ref-note { color: #c05050; opacity: .9; }
+
+.xp-line,
+.xp-jump { cursor: pointer; text-decoration: underline dotted; }
+.xp-line { font-size: 10px; opacity: .6; }
+.xp-jump:hover { opacity: 1; color: #007acc; }
+
+.xp-warns { font-size: 11px; opacity: .75; }
+.xp-warns div { word-break: break-all; }
+.xp-notes {
+  margin-top: 8px;
+  font-size: 11px;
+  opacity: .6;
+  border-top: 1px dashed rgba(128, 128, 128, .3);
+  padding-top: 6px;
+}

@@ -1,0 +1,2490 @@
+/* 从 index.html 拆出来的样式。改这里，别再去 index.html 找 <style>。 */
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f26; --muted: #7a838f;
+    --border: #e2e5ea; --hover: #eef1f5; --accent: #2f6fed; --danger: #e34d59;
+    --ok: #00b42a; --code: #f2f4f7;
+    /* 日志行用等宽字体：横向滚动宽度是按 `字符数 × 一个字宽` 算的，
+       比例字体下这个乘法不成立，长行会算不准。 */
+    --mono: ui-monospace, Menlo, Monaco, Consolas, "DejaVu Sans Mono", monospace;
+    /* 日志行高。**JS 里的 LOG_ROW_H 必须跟它一样** —— 两处不一致就是整体错位。 */
+    --row-h: 20px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --panel: #1c2027; --text: #e6e9ee; --muted: #8b95a3;
+      --border: #2b313a; --hover: #252b34; --accent: #4c8dff; --danger: #f26d78;
+      --ok: #3ecf6a; --code: #12151a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  input, textarea, select { font: inherit; color: inherit; }
+  /* 原生 time/datetime 控件默认字号很小、颜色偏淡，在深色主题下几乎看不清。
+     Chrome 会把数字画在 ::-webkit-datetime-edit 里，只设外层 font-size 不生效，
+     必须把改伪元素一起覆盖；这里统一提到 15px 并强制继承文字色。 */
+  input[type="time"], input[type="date"], input[type="datetime-local"] {
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="time"]::-webkit-datetime-edit,
+  input[type="date"]::-webkit-datetime-edit,
+  input[type="datetime-local"]::-webkit-datetime-edit {
+    font-size: 15px;
+    color: inherit;
+  }
+  input[type="time"]::-webkit-calendar-picker-indicator { opacity: .75; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* ---------- 登录 ---------- */
+  .login-layer {
+    position: fixed; inset: 0; z-index: 100; display: flex;
+    align-items: center; justify-content: center; background: var(--bg);
+  }
+  .login-card {
+    width: min(360px, 90vw); padding: 28px 26px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.12);
+  }
+  .login-card h1 { margin: 0 0 6px; font-size: 19px; }
+  .login-card p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  .login-card input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); outline: none;
+  }
+  .login-card input:focus { border-color: var(--accent); }
+  .login-card button {
+    width: 100%; margin-top: 12px; padding: 10px; border: none;
+    border-radius: 8px; background: var(--accent); color: #fff; font-weight: 500;
+  }
+  .login-err { margin-top: 10px; color: var(--danger); font-size: 13px; min-height: 18px; }
+
+  /* ---------- 布局 ---------- */
+  .app { display: flex; flex-direction: column; height: 100%; }
+  .topbar {
+    display: flex; align-items: center; gap: 8px; padding: 9px 14px;
+    background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .brand { font-weight: 600; margin-right: 4px; white-space: nowrap; }
+  .spacer { flex: 1; }
+  .tbtn {
+    padding: 5px 10px; border: 1px solid var(--border); background: transparent;
+    border-radius: 7px; white-space: nowrap; font-size: 13px;
+  }
+  .tbtn:hover { background: var(--hover); }
+  /* 开着的开关：主色**描边 + 文字**，不用整块填充 ——
+     工具栏一行里并排放着三四个开关时，填充块看着像"坏了"（截图上就是几块蓝方块） */
+  .tbtn.on {
+    color: var(--accent); border-color: var(--accent);
+    background: transparent; font-weight: 600;
+  }
+  .tbtn.mini { padding: 4px 8px; font-size: 12px; }
+  /* 禁用的按钮要有反馈：Gradle 那边一个请求可能跑几分钟，页面得看得出来"在忙" */
+  .tbtn:disabled { opacity: .4; cursor: default; }
+  select.tbtn { padding: 5px 6px; max-width: 190px; }
+
+  /* 顶部的工作区标签：一格一个，当前那个高亮。
+     （文件树面板里不再重复一遍 —— 那是同一件事的第二个入口） */
+  .ws-tabs {
+    display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+    max-width: 46vw; padding: 1px 0;
+  }
+  /* 隐藏滚动条 ≠ 禁止滚动：横向照样能滚（触控板 / Shift+滚轮 /
+     20-workspace.js 里把竖向 deltaY 转成 scrollLeft 的那段监听）。
+     目的只是别让顶栏因为一条 9px 的灰条高出几像素、把整排挤歪。 */
+  .ws-tabs::-webkit-scrollbar { display: none; }
+  .ws-tab {
+    flex: 0 0 auto; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+    font-size: 13px; color: var(--muted); white-space: nowrap; user-select: none;
+    background: transparent; border: 1px solid var(--border); font-family: inherit;
+    max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ws-tab:hover { color: var(--text); background: var(--hover); }
+  /* 当前工作区：会话、工作区记忆、.ai/save.json 都跟它走 */
+  .ws-tab.on {
+    border-color: var(--accent); color: var(--accent);
+    font-weight: 600; background: transparent;
+  }
+
+  /* min-width:0 + overflow-x:hidden：三栏并排时，任何一栏内容过宽都不该把整页推宽 */
+  .main { flex: 1; display: flex; min-height: 0; min-width: 0; overflow-x: hidden; }
+
+  /* ---------- Logcat 独立窗口（`/?detached=log`） ----------
+     新窗口里只留日志面板：顶栏、活动栏、文件栏、会话栏、终端、任务框全藏掉，
+     编辑器那一栏撑满整个窗口。 */
+  body.detached-log .topbar,
+  body.detached-log .activity,
+  body.detached-log .panel-files,
+  body.detached-log .panel-chat,
+  body.detached-log .panel-resize,
+  body.detached-log .term,
+  body.detached-log .task-box { display: none !important; }
+  body.detached-log .app { height: 100vh; }
+  body.detached-log .main { display: block; }
+  body.detached-log .panel-editor { height: 100%; width: 100%; }
+  body.detached-log #edTabs { display: none; }
+
+  /* ---------- 活动栏（左边缘图标条，点一下换左栏内容） ---------- */
+  .activity {
+    flex: 0 0 46px; display: flex; flex-direction: column;
+    align-items: center; gap: 3px; padding: 7px 0;
+    background: var(--panel); border-right: 1px solid var(--border);
+  }
+  .act {
+    width: 36px; height: 36px; border: none; background: none;
+    color: var(--muted); font-size: 18px; line-height: 1;
+    border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; padding: 0; flex-shrink: 0;
+  }
+  .act:hover { background: var(--hover); color: var(--text); }
+  .act.on { color: var(--accent); background: var(--hover); }
+  /* 活动栏按钮右上角的数字角标（现在只有「任务」用）。
+     以前是 `position:absolute` + 负 margin 硬凑位置，父元素没有定位上下文，
+     角标会飘到别处；这里给 .act 一个 relative，规规矩矩贴在右上角。 */
+  .act { position: relative; }
+  .act .badge {
+    position: absolute; top: 1px; right: 1px;
+    background: var(--accent); color: #fff; border-radius: 8px;
+    font-size: 9px; padding: 0 4px; line-height: 13px; min-width: 13px;
+    text-align: center; font-variant-numeric: tabular-nums;
+  }
+  .activity .spacer { flex: 1; }
+  /* 曾有 `#pluginActs { display:contents }` 占位，靠 `order` 排插件按钮 —— 已废弃。
+     原因：`order` 只在同一父元素下结算，`display:contents` 的占位导致插件按钮
+     的 order 被按「合并后的父层」算，跨浏览器不一致，踩过的表现是整段按钮被
+     甩到最底部（▶ 下面）。
+     现在按钮由 50-views.js 直接 insertBefore 到 `▶` 之前，顺序由 DOM 决定。 */
+
+  /* ---------- 侧栏内的视图 ---------- */
+  .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .view-bar {
+    display: flex; gap: 6px; align-items: center; padding: 6px 8px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap;
+  }
+  .view-bar .spacer { flex: 1; }
+  .view-scroll { flex: 1; overflow: auto; padding: 4px 0 10px; }
+  /* 日志行的「选中」态（Ctrl+C 复制的是这些行） */
+  .vrow.sel { background: rgba(88, 166, 255, .18); }
+  /* Gradle 多选：Ctrl+点击勾上的任务行。为什么不用上面那个 `.vrow.sel`：
+     它和日志行的多选是两套语义（那边是一次性复制、这里是"待会一起跑"），
+     而且 hover 是本文件更靠后定义的 `.vrow:hover`，同权重会把背景盖掉 ——
+     选择器带 #gradleList 才能稳定压过它。左侧那道竖条是勾选的持久标记，
+     鼠标划过去（hover）不该让它看起来还在。 */
+  #gradleList .vrow.gpick {
+    background: rgba(88, 166, 255, .18);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  #logList:focus { outline: none; }
+
+  /* ---------- 日志的虚拟滚动 ---------- */
+  /* 行的坐标系：第 i 行永远在 y = i × --row-h。行高写死是前提 ——
+     所以长消息只能**单行截断**（原版同样的取舍）：一换行行高就不定，
+     虚拟滚动算不准。截断不等于看不见，横向能拉过去（见 #logRows 的宽度）。 */
+  /* padding 归零：绝对定位的子元素以 padding box 为基准，留着上下 padding
+     会让 scrollHeight 比内容多出那几像素，滚到底就永远差一点。 */
+  #logList { position: relative; padding: 0; }
+  #logSpacer { position: absolute; top: 0; left: 0; width: 1px; }
+  #logRows { position: absolute; top: 0; left: 0; }
+  /* 选择器带 #logList 是**必须**的：`.vrow` 那套通用行样式在本文件里排得更靠后
+     （第 187 行附近），同为单类选择器时后写的赢 —— 不加这个 id，
+     下面的 padding / white-space 会被 `.vrow` 的 `4px 10px` 和 `nowrap` 悄悄盖掉。 */
+  #logList .lrow {
+    position: absolute; left: 0; top: 0; width: 100%;
+    height: var(--row-h); line-height: var(--row-h);
+    font-family: var(--mono); font-size: 12px; padding: 0 10px;
+    white-space: pre; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* 级别那个小徽标：别跟着 20px 的行高撑成一条色带 */
+  #logList .lrow .vtag { line-height: 16px; vertical-align: 1px; }
+  /* 行首的设备时间：等宽数字（tabular-nums），否则秒数每跳一下就整列抖 */
+  #logList .lrow .ltime {
+    color: var(--muted);
+    margin-right: 7px;
+    font-variant-numeric: tabular-nums;
+  }
+  #logHint { position: absolute; top: 16%; left: 0; right: 0; }
+  /* 内容比视口短时补的那句说明（过滤后只剩几行，下面是空的） */
+  .tail-note {
+    position: absolute; left: 10px; padding: 4px 0; pointer-events: none;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    white-space: nowrap;
+  }
+  .tail-note.hidden { display: none; }
+  /* 终端当前目录：路径可能很长，一行截断不换行 */
+  .term-cwd {
+    padding: 3px 10px; font-size: 11px; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* pre-wrap：好几处提示文案里写了 \n，没有它会被折成一行 */
+  .view-empty { padding: 20px 14px; color: var(--muted); font-size: 12px; text-align: center; line-height: 1.8; white-space: pre-wrap; }
+  /* 失败提示块：左对齐 + 保留换行 + 可选中。
+     .view-empty 是居中的，装不下多行诊断（构建报错、daemon 日志那种），
+     硬塞进去会被拍成一行居中的长句子，根本没法读。 */
+  .view-err {
+    padding: 14px; margin: 8px; font-size: 12px; color: var(--text);
+    text-align: left; line-height: 1.7; white-space: pre-wrap;
+    word-break: break-word; user-select: text;
+    background: rgba(248, 81, 73, .08);
+    border: 1px solid rgba(248, 81, 73, .35); border-radius: 6px;
+  }
+  .view input[type=text], .view input[type=search], .view select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 4px 7px; font-size: 12px;
+    outline: none; min-width: 0; font-family: inherit;
+  }
+  .view input[type=text]:focus, .view input[type=search]:focus { border-color: var(--accent); }
+  .view input.grow { flex: 1; }
+  .vrow {
+    padding: 4px 10px; font-size: 12px; cursor: default;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .vrow:hover { background: var(--hover); }
+  /* SVN 左侧列表：Ctrl 多选的行和"当前正在看对比的那个文件"。
+     为什么不用现成的 `.vrow.sel`（第 172 行，日志行复用的那个浅蓝底）：
+     那一套是给日志多选用的，色值在深色主题下几乎看不出；这里要和 hover、
+     以及左边那排出现在同一屏的目录行区分开，所以单独给一套。
+     `.cur` 是"面板里正在显示的文件"——它跟选中集是两回事：跳转过去时不给它
+     打钩（那会顺手把用户 Ctrl 选的另一批冲掉），只描一道左边框。 */
+  #svnList .vrow.sel {
+    background: rgba(88, 166, 255, .18);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  #svnList .vrow.cur {
+    background: var(--hover);
+    box-shadow: inset 2px 0 0 var(--muted);
+  }
+  /* 搜索范围标签：以前 flex-shrink:0 且不限宽，路径一长就把右边那个 ×
+     挤出可视区，看着像"没有标题"。现在允许收缩 + 省略号，完整路径走 title。 */
+  .flabel {
+    font-size: 11px; color: var(--muted);
+    flex: 0 1 auto; min-width: 0; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .vrow.ind { padding-left: 22px; }
+  .vrow .caret {
+    display: inline-block; width: 12px; color: var(--muted);
+    font-size: 10px; user-select: none;
+  }
+  .vrow .sub { color: var(--muted); font-size: 11px; }
+  .vgroup {
+    padding: 5px 10px 2px; font-size: 11px; color: var(--muted);
+    font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* 搜索结果的「范围 / 过滤」那两行：内容是说明文字，宁可换行也别省略号 ——
+     左栏就两百来像素，`在整个工作区搜索「x」· 包含 device,frameworks；排除…`
+     一行放不下，一切掉就看不见关键信息了。 */
+  .vgroup.wrap {
+    white-space: normal; overflow: visible; overflow-wrap: anywhere;
+    line-height: 1.5; padding-bottom: 4px;
+  }
+  .vtag {
+    display: inline-block; min-width: 13px; text-align: center;
+    font-size: 10px; border-radius: 3px; padding: 0 3px; margin-right: 6px;
+    font-family: Consolas, monospace;
+  }
+  .vtag.M { color: #d29922; } .vtag.A { color: #3fb950; }
+  .vtag.D { color: #f85149; } .vtag.\? { color: var(--muted); }
+  .vtag.R { color: #58a6ff; } .vtag.C { color: #f85149; font-weight: 700; }
+
+  /* ---------- 搜索结果：按文件夹折叠 ---------- */
+  /* 文件夹头一行：三角 + 目录名 + 命中数。用 <i> 而不是真按钮 ——
+     整行都要可点（VS Code 也是整行折叠），按钮会把可点区缩成一小块。 */
+  .fd {
+    display: flex; align-items: center; gap: 4px; cursor: pointer;
+    padding: 4px 8px; font-size: 12px; user-select: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fd:hover { background: var(--hover); }
+  .fd > i {
+    display: inline-block; width: 12px; flex: 0 0 auto; font-size: 10px;
+    color: var(--muted); font-style: normal;
+  }
+  .fd > b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+  .fd .cnt {
+    margin-left: auto; flex: 0 0 auto; padding: 0 5px; font-size: 10px;
+    color: var(--muted); background: var(--hover); border-radius: 8px;
+  }
+  /* 层级缩进由 JS 内联 `paddingLeft` 给（`search.js` 的 `FIND_INDENT`），
+     这里不再写 `.fd.depth*` —— 那几条从来没人加过类名，而且内联会覆盖它们，
+     留着只会让人以为改这里能调缩进。 */
+  /* 文件行：`名 :行` 一行，下面挂匹配行。左边距同样由 JS 按层级给。 */
+  .fr {
+    display: flex; align-items: baseline; gap: 4px; cursor: default;
+    padding: 3px 8px; font-size: 12px; overflow: hidden; white-space: nowrap;
+  }
+  .fr:hover { background: var(--hover); }
+  .fr .nm { overflow: hidden; text-overflow: ellipsis; }
+  .fr .lc { margin-left: auto; flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+  /* 命中行：单行代码预览，命中处用 accent 背景标出来。
+     padding-left 原来写死 26px，导致不管属主文件在第几层都从同一个 x 起；
+     现在由 `findHitLine` 的 `pad` 参数按层级给。 */
+  .frl {
+    padding: 1px 8px; font-family: Consolas, monospace; font-size: 11px;
+    color: var(--muted); cursor: pointer; white-space: pre;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .frl:hover { background: var(--hover); color: var(--text); }
+  .frl .no { display: inline-block; min-width: 30px; color: var(--muted); opacity: .7; }
+  .frl mark { background: rgba(88, 166, 255, .3); color: inherit; border-radius: 2px; }
+
+  /* ---------- 三栏 ---------- */
+  .panel { display: flex; flex-direction: column; min-width: 0; background: var(--panel); }
+  .panel + .panel { border-left: 1px solid var(--border); }
+
+  /* 左右两栏的宽度由拖动决定，存成 CSS 变量挂在 .main 上：
+     这样 `.panel.collapsed { flex: 0 0 34px }`（选择器更具体）照样能压过它，
+     折叠 / 展开不会因为拖动过而失效。 */
+  .main { --files-w: 250px; --chat-w: 380px; }
+  .panel-files  { flex: 0 1 var(--files-w); min-width: 150px; }
+  /* basis 必须是 0，不能是 auto：auto 会取"内容理想宽度"，而 SVN 对比面板
+     一行就几千 px 的代码（.diff-col 里 `white-space:pre` 不折行），编辑器这一项
+     的理想宽度会被撑成天文数字 → 容器严重溢出 → 收缩几乎全落在编辑器上，
+     左右栏被挤到 min-width 却怎么拖都拖不动（多出来的宽度立刻又被吃掉）。
+     ★ 对比面板已改成不折行 + 每栏自己横向滚动，但这条**不能回退**：不折行意味着
+       min-content 只会更大，basis:auto 撑爆的问题比以前更明显。
+     min-width:0 同时解掉 flex 项默认 min-width:auto 的下限，
+     让溢出交给 .diff-pane-l / .diff-pane-r 各自的 overflow:auto 横向滚动处理。 */
+  .panel-editor { flex: 1 1 0; min-width: 0; }
+  .panel-chat   { flex: 0 1 var(--chat-w); min-width: 280px; }
+
+  /* 面板之间的拖动条：6px 宽、平时只画一条 1px 分隔线，悬停才亮 */
+  .panel-resize {
+    flex: 0 0 6px; position: relative; cursor: col-resize;
+    background: transparent; touch-action: none;
+  }
+  .panel-resize::before {
+    content: ""; position: absolute; left: 2px; top: 0; bottom: 0;
+    width: 1px; background: var(--border);
+  }
+  .panel-resize:hover::before, .panel-resize.dragging::before {
+    left: 1px; width: 3px; background: var(--accent); opacity: .6;
+  }
+  /* 窄屏上优先保证内容：拖动条直接不显示，宽度回到默认 */
+  @media (max-width: 760px) {
+    .panel-resize { display: none; }
+  }
+
+  .panel-head {
+    display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+    border-bottom: 1px solid var(--border); font-size: 12px;
+    color: var(--muted); flex-shrink: 0; white-space: nowrap;
+  }
+  .panel-head .spacer { flex: 1; }
+  .panel-head button {
+    border: none; background: none; color: var(--muted);
+    padding: 1px 5px; border-radius: 4px; font-size: 13px;
+  }
+  .panel-head button:hover { color: var(--text); background: var(--hover); }
+  .panel-head button.on { color: var(--accent); }
+  .panel-title { overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+
+  .panel-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* 折叠后只留一条窄边 + 竖排标题。
+     **必须同时写 min-width**：上面 `.panel-files { min-width:150px }` /
+     `.panel-chat { min-width:280px }` 的优先级比这里低，但折叠规则如果只写
+     `flex` 不写 `min-width`，min-width 依然生效 —— 表现就是"点了折叠，
+     只从 250 缩到 150，看着几乎没变"。 */
+  .panel.collapsed { flex: 0 0 34px; min-width: 34px; max-width: 34px; }
+  .panel.collapsed .panel-body { display: none; }
+  .panel.collapsed .panel-head {
+    flex-direction: column; height: 100%; padding: 8px 0;
+    justify-content: flex-start; gap: 8px;
+  }
+  .panel.collapsed .panel-head .spacer { flex: 0; }
+  .panel.collapsed .hide-when-collapsed { display: none; }
+  .panel.collapsed .panel-title {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    max-height: 220px; font-weight: 400;
+  }
+  .panel.collapsed .panel-head button { padding: 4px; }
+
+  .tree { flex: 1; overflow: auto; padding: 4px 0 10px; }
+
+  /* ---------- Gradle 面板：设备/JDK 状态行 + 两段可折叠列表 ---------- */
+  .g-note {
+    font-size: 11px; color: var(--muted); padding: 0 10px 5px;
+    overflow-wrap: anywhere;
+  }
+  .g-note.bad { color: var(--danger); }
+  .g-sec {
+    display: flex; align-items: center; gap: 5px;
+    padding: 6px 10px; font-size: 11px; color: var(--muted);
+    cursor: pointer; user-select: none;
+    border-bottom: 1px solid var(--border); background: var(--bg);
+  }
+  .g-sec:hover { background: var(--hover); color: var(--text); }
+  .g-sec .nm { letter-spacing: .4px; }
+  .g-sec .cnt { margin-left: auto; opacity: .85; white-space: nowrap; }
+  /* 悬浮头：列表滚到几千行时，两段的标题还得挂在顶上，否则滑下去就不知道
+     自己在看 ALL 还是 RECENT，也点不到折叠。
+     只有被滚动压住的那些才吸顶 —— body 直接挂在 #gradleList 下（见
+     paintGradle），靠在它上面的上边距把标题顶上去，顶到头的才 sticky。
+     sticky 需要不透明背景，否则下面滚过去的行会透上来。 */
+  .g-sec.sticky {
+    position: sticky; top: 0; z-index: 3;
+    background: var(--panel, var(--bg));
+  }
+  /* 过滤/加载/报错这些整段提示，别再被标题压住一截 */
+  #gradleList > .view-empty, #gradleList > .view-err { margin-top: 8px; }
+
+  /* ---------- 编辑器 ---------- */
+  .ed-tabs {
+    display: flex; align-items: stretch; overflow-x: auto; flex-shrink: 0;
+    border-bottom: 1px solid var(--border); background: var(--bg);
+    min-height: 30px;
+  }
+  .ed-tabs::-webkit-scrollbar { height: 5px; }
+  .ed-tab {
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 6px 5px 12px; font-size: 12px; color: var(--muted);
+    cursor: default; border-right: 1px solid var(--border);
+    white-space: nowrap; flex-shrink: 0; max-width: 210px; user-select: none;
+  }
+  .ed-tab:hover { background: var(--hover); }
+  .ed-tab.active {
+    background: var(--panel); color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  .ed-tab .tab-name { overflow: hidden; text-overflow: ellipsis; }
+  .ed-tab button {
+    border: none; background: none; color: var(--muted);
+    padding: 0 3px; border-radius: 3px; font-size: 11px; line-height: 1;
+  }
+  .ed-tab button:hover { color: var(--danger); background: var(--hover); }
+
+  /* 顶栏动作按钮（由插件 ACTIONS 申请，applyEditorActions 建出来的）。
+     .ed-act-run = launcher 的 ▶ 运行，绿色表示"能跑"；
+     .ed-act-md  = md_preview 的 预览/源码，按下时高亮表示"正在预览"。 */
+  .ed-act-run { color: #3fb950; font-weight: 500; }
+  .ed-act-run:hover { background: var(--hover); }
+  .ed-act-run:disabled { opacity: 0.45; cursor: default; }
+  .ed-act-md.on { background: var(--hover); color: var(--accent, #58a6ff); }
+  .ed-status { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .ed-status.err { color: var(--danger); }
+  /* 顶栏右侧的编码 / 换行：小胶囊按钮，点了就切 */
+  .ed-info { display: inline-flex; gap: 4px; align-items: center; margin-right: 8px; }
+  .ed-meta {
+    font: inherit; font-size: 11px; line-height: 1;
+    padding: 3px 7px; border-radius: 5px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); cursor: pointer; white-space: nowrap;
+  }
+  .ed-meta:hover { color: var(--text); background: var(--hover); }
+
+  /* 双层叠加：底层 pre 画彩色文字，上层 textarea 文字透明只留光标。
+     两层的字体、内边距、行高、换行规则必须完全一致，否则会错位。 */
+  .ed-stack { position: relative; flex: 1; min-height: 0; }
+
+  /* ---------- 查找 / 替换浮层 ---------- */
+  .ed-find {
+    position: absolute; top: 6px; right: 12px; z-index: 6;
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 5px 6px; font-size: 12px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
+  }
+  .ed-find .ef-row { display: flex; align-items: center; gap: 4px; }
+  .ed-find input {
+    width: 190px; padding: 3px 7px; outline: none;
+    font: inherit; font-size: 12px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+  }
+  .ed-find input:focus { border-color: var(--accent); }
+  .ed-find .ef-opt,
+  .ed-find .ef-btn {
+    font: inherit; font-size: 11px; line-height: 1; white-space: nowrap;
+    padding: 4px 6px; border-radius: 5px; cursor: pointer;
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+  }
+  .ed-find .ef-opt:hover,
+  .ed-find .ef-btn:hover { background: var(--hover); color: var(--text); }
+  .ed-find .ef-opt.on { color: var(--accent); border-color: var(--accent); }
+  .ed-find .ef-count {
+    min-width: 44px; text-align: center; font-size: 11px; color: var(--muted);
+  }
+  .ed-find .ef-count.none { color: var(--danger); }
+
+  /* 行号槽的宽度。两层正文（.ed-hl / .ed-area）的 padding-left 要把它让出来，
+     所以宽度写成变量，JS 量出真实宽度后再决定要不要留位（单行文件不留）。 */
+  .ed-stack { --gutter-w: 46px; }
+
+  .ed-hl, .ed-area {
+    position: absolute; inset: 0; margin: 0; border: none;
+    padding: 10px 12px; box-sizing: border-box;
+    font: 13px/1.7 Consolas, "Cascadia Mono", monospace;
+    white-space: pre; overflow: auto; tab-size: 4;
+    word-wrap: normal; overflow-wrap: normal;
+  }
+  /* 行号占位：只在 .ed-stack 带 has-gutter 时让出来（否则纯文本文件左边也空一块） */
+  .ed-stack.has-gutter .ed-hl,
+  .ed-stack.has-gutter .ed-area {
+    padding-left: calc(12px + var(--gutter-w));
+  }
+
+  /* 行号槽本体：字体/行高/上下内边距必须和正文一模一样，否则每行都会错位。
+     右边一条淡竖线当分隔；overflow hidden，滚动完全跟着 edHl 走。 */
+  .ed-gutter {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: var(--gutter-w); margin: 0; box-sizing: border-box;
+    padding: 10px 8px 10px 0;
+    font: 13px/1.7 Consolas, "Cascadia Mono", monospace;
+    text-align: right; color: var(--muted);
+    background: var(--bg); border-right: 1px solid var(--border);
+    overflow: hidden; pointer-events: none; user-select: none;
+    z-index: 3; opacity: .72;
+  }
+  .ed-gutter.hidden { display: none; }
+  /* 折叠预览（Logcat / Markdown）时行号槽一起让开 */
+  .ed-stack.hidden .ed-gutter { display: none; }
+  .ed-hl {
+    background: var(--bg); color: var(--text);
+    pointer-events: none; z-index: 1;
+  }
+  .ed-hl code { font: inherit; }
+  .ed-area {
+    background: transparent; color: transparent;
+    caret-color: var(--text); z-index: 2; resize: none; outline: none;
+  }
+
+  /* 输入时的主要开销是两层一起重绘：底层 pre 里可能有几千个 span。
+     contain 把两层的布局/绘制范围锁在自己身上，浏览器不用每次按键都
+     去重算整棵树；will-change 把它们提到独立合成层。 */
+  .ed-hl, .ed-area {
+    contain: strict;
+    will-change: transform;
+    transform: translateZ(0);
+  }
+  .ed-hl code { contain: none; }
+  .ed-area::selection { background: rgba(76, 141, 255, .32); }
+  .ed-area::-moz-selection { background: rgba(76, 141, 255, .32); }
+
+  /* 查找「当前命中」的色块：textarea 失焦时浏览器不画选区，靠这层补。
+     z-index 在正文（2）之上、查找浮层（6）之下；pointer-events 关掉，
+     否则会挡住光标点击。 */
+  .ed-find-mark {
+    position: absolute; z-index: 3; pointer-events: none; box-sizing: border-box;
+    background: rgba(76, 141, 255, .26);
+    border: 1px solid rgba(76, 141, 255, .7);
+    border-radius: 2px;
+  }
+  .ed-find-mark.hidden { display: none; }
+
+  /* ---- 补全下拉框（插件 auto_code / autoCode）----
+     贴在光标右下角。位置是 JS 算出来的：textarea 拿不到光标的像素坐标，
+     只能用一把隐形尺子量出"光标前面那一行有多宽"，所以这里的字体必须和
+     .ed-area 完全一致，差一点就会整体偏移。 */
+  .ed-complete {
+    position: absolute; z-index: 4; min-width: 200px; max-width: 460px;
+    max-height: 232px; overflow: auto; padding: 3px 0;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 5px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+    font: 12px/1.6 Consolas, "Cascadia Mono", monospace;
+  }
+  .ed-complete .ci {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 2px 10px; cursor: pointer; white-space: nowrap;
+  }
+  .ed-complete .ci.on { background: var(--hover); }
+  .ed-complete .ci b { font-weight: 600; color: var(--text); }
+  .ed-complete .ci em { font-style: normal; color: var(--accent); font-size: 11px; }
+  .ed-complete .ci span { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+  /* ---- 转到定义（55-goto.js）----
+     peek 浮层：半黑遮罩铺满视口，框在中间（flex 居中），点遮罩空白处关闭。
+     下划线是 Ctrl 按住时的提示。
+
+     尺寸：以前是 width 520px + max-height 55%，AOSP 那种超长路径加长代码行
+     会被省略号 / 右边框切掉。后来加到 1100px、几乎满高，但仍是「贴在编辑区
+     右上角」的小浮层。现在改成盖住整个视口：
+       · 遮罩 position:fixed，不受 .ed-stack 的 overflow 影响，也不吃
+         .ed-hl/.ed-area 的 contain:strict（那是兄弟节点，不是祖先）；
+       · 框宽度取视口比例（1200px 封顶），**高度交给内容**（只给 max-height
+         封顶、不写 height）—— 短列表就是小框，长列表自己长到大框，这才是
+         「自适应大小」；写死 height 会让 3 条结果也占一满屏；
+       · overflow:auto 是 resize:both 生效的前提，别删。
+     z-index 5：和原来同档，仍在 .task-box(40) / .board(55) / .modal(60) 之下。 */
+  .ed-peek-mask {
+    position: fixed; inset: 0; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .45);
+  }
+  .ed-peek {
+    position: relative;
+    /* 宽度：视口留 80px 边距，最多 1200px。高度：不写，由 .ph + 条目撑开，
+       max-height 封顶后内部滚动。 */
+    width: min(1200px, calc(100vw - 80px));
+    max-width: calc(100vw - 80px);
+    max-height: calc(100vh - 80px);
+    /* 用户拖拽时浏览器会把 width/height 写成行内样式，上面的 calc 就不管用了
+       —— 用 max-* 兜住，别让它拖出视口外面。 */
+    overflow: auto; resize: both;
+    min-width: 280px; min-height: 120px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+    font: 12px/1.6 Consolas, "Cascadia Mono", monospace;
+  }
+  .ed-peek .ph {
+    position: sticky; top: 0; padding: 6px 10px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    color: var(--muted); font-size: 11px;
+    /* 标题文字 + 右侧按钮（⟳ 重查 / 全部折叠）排一行；文字长了就省略，
+       别把按钮挤出可视区 */
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ed-peek .ph-txt {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ed-peek .ph-retry {
+    flex: 0 0 auto; padding: 0 6px; line-height: 18px; font: inherit;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .ed-peek .ph-retry:hover { color: var(--text); background: var(--hover); }
+  .ed-peek .ph-retry.busy { opacity: .6; cursor: default; }
+  /* 「全部折叠 / 全部展开」：中文两个字以上，nowrap 别让它在窄框里折成两行 */
+  .ed-peek .ph-fold { white-space: nowrap; }
+  /* 老的「按目录一级平铺」组头（.pg）。渲染已改成目录/文件树（.pk-dir /
+     .pk-file），这里保留只为兜底：旧缓存页面里残留的 .pg 不至于变成裸文字。
+     新代码不要再产出 .pg。 */
+  .ed-peek .pg {
+    padding: 4px 10px; cursor: pointer; font-size: 11px;
+    color: var(--muted); background: var(--hover);
+    border-bottom: 1px solid var(--border);
+    white-space: normal; word-break: break-all; line-height: 1.5;
+  }
+  .ed-peek .pg.on { color: var(--accent); }
+  /* ---- 引用/定义列表的树（目录 → 文件 → 命中行，和左侧文件树同一套观感）----
+     三行共用的骨架：箭头 + 图标 + 名字 + 计数。缩进由 JS 写 padding-left，
+     这里不写死 —— 深度是数据决定的。 */
+  .ed-peek .pk-dir,
+  .ed-peek .pk-file {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px 3px 0; cursor: pointer; font-size: 12px;
+    white-space: nowrap; border-bottom: 1px solid var(--border);
+  }
+  .ed-peek .pk-dir:hover,
+  .ed-peek .pk-file:hover { background: var(--hover); }
+  /* 目录行比文件行淡一档、字重轻一档：它不参与「选哪一条」，只负责组织 */
+  .ed-peek .pk-dir { color: var(--muted); }
+  .ed-peek .pk-file { color: var(--text); }
+  /* 选中项藏在这个节点底下时描一下 —— 折叠起来后还能看出选在哪一片 */
+  .ed-peek .pk-dir.on .nm,
+  .ed-peek .pk-file.on .nm { color: var(--accent); }
+  .ed-peek .pk-dir .ar,
+  .ed-peek .pk-file .ar {
+    width: 12px; flex-shrink: 0; text-align: center;
+    color: var(--muted); font-size: 10px;
+  }
+  .ed-peek .pk-dir .ic,
+  .ed-peek .pk-file .ic { flex-shrink: 0; width: 15px; text-align: center; }
+  /* 源码文件的字母标识（K / J / Py …）：色值不借用 .node 那份 —— .node 带
+     user-select:none 和 .sel 蓝底，套进浮层会和这里的选中态打架，所以复制一份 */
+  .ed-peek .pk-file .ic.src {
+    font-size: 9px; font-weight: 700; line-height: 1;
+    letter-spacing: -.3px; opacity: 1;
+    font-family: var(--mono);
+    color: var(--accent);
+  }
+  .ed-peek .pk-file .ic.src[data-ic="C"]   { color: #4a9eff; }
+  .ed-peek .pk-file .ic.src[data-ic="J"]   { color: #e8913a; }
+  .ed-peek .pk-file .ic.src[data-ic="K"]   { color: #a97bf0; }
+  .ed-peek .pk-file .ic.src[data-ic="X"]   { color: #38b48b; }
+  .ed-peek .pk-file .ic.src[data-ic="Py"]  { color: #4a8fd8; }
+  .ed-peek .pk-file .ic.src[data-ic="Js"],
+  .ed-peek .pk-file .ic.src[data-ic="Ts"]  { color: #d4a017; }
+  .ed-peek .pk-file .ic.src[data-ic="Md"]  { color: #8b95a3; }
+  /* 名字可长可短：撑满剩余宽度、超了省略号（完整路径在 title 上） */
+  .ed-peek .pk-dir .nm,
+  .ed-peek .pk-file .nm {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  /* 「N 处 / M 个文件」靠右、不参与省略 */
+  .ed-peek .pk-dir .cnt,
+  .ed-peek .pk-file .cnt {
+    flex-shrink: 0; color: var(--muted); font-size: 11px;
+  }
+  .ed-peek .pi {
+    padding: 5px 10px 5px 0; cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .ed-peek .pi:last-child { border-bottom: none; }
+  .ed-peek .pi.on { background: var(--hover); }
+  /* 行上固定「:行号　类·函数」，可能比浮层还宽 —— 必须允许折行/断词，
+     否则 flex 的 nowrap 行会把行号挤出可视区（长路径的典型症状）。 */
+  .ed-peek .pi .loc {
+    color: var(--accent); font-size: 11px;
+    white-space: normal; word-break: break-all;
+  }
+  .ed-peek .pi .code {
+    color: var(--text);
+    /* 以前是 white-space:pre + overflow:hidden + ellipsis：长代码固定一行，
+       超出直接打省略号（AOSP 那种一屏全是 `…`，等于没显示）。改成折行，
+       代价是不再保持代码的原始对齐，但「能不能看全」比对齐重要。 */
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+
+  .ed-goto-mark {
+    position: absolute; z-index: 3; pointer-events: none;
+    border-bottom: 2px solid var(--accent); border-radius: 1px;
+  }
+
+  /* 量宽度用的隐形尺子：和 .ed-area 同一套字体 / tab 宽度 */
+  .ed-measure {
+    position: absolute; left: -9999px; top: 0; visibility: hidden;
+    margin: 0; padding: 0; border: none; white-space: pre;
+    font: 13px/1.7 Consolas, "Cascadia Mono", monospace; tab-size: 4;
+  }
+
+  /* ---- Kotlin 染色配色（浅色）---- */
+  .tk-keyword-declaration { color: #cf222e; }
+  .tk-keyword-control     { color: #cf222e; }
+  .tk-keyword-hard        { color: #cf222e; }
+  .tk-keyword-soft        { color: #8250df; }
+  .tk-keyword             { color: #cf222e; }
+  .tk-storage-modifier    { color: #0550ae; }
+  .tk-preproc             { color: #953800; }
+  .tk-string              { color: #0a3069; }
+  .tk-string-quoted-single { color: #0a3069; }
+  .tk-string-template     { color: #953800; font-weight: 600; }
+  .tk-comment-line        { color: #6e7781; font-style: italic; }
+  .tk-comment-block       { color: #6e7781; font-style: italic; }
+  .tk-comment-documentation { color: #6e7781; font-style: italic; }
+  .tk-number              { color: #0550ae; }
+  .tk-annotation          { color: #953800; }
+  .tk-function-call       { color: #8250df; }
+  .tk-function-declaration { color: #8250df; font-weight: 500; }
+  .tk-function-reference  { color: #8250df; }
+  .tk-type                { color: #953800; }
+  .tk-type-class          { color: #953800; font-weight: 500; }
+  .tk-package             { color: var(--text); }
+  .tk-variable-language   { color: #0550ae; font-style: italic; }
+  .tk-variable-parameter  { color: #953800; }
+  .tk-string-escape       { color: #0a3069; }
+  .tk-keyword-other       { color: #953800; }
+  .tk-operator            { color: #cf222e; }
+  .tk-punctuation         { color: var(--text); }
+  .tk-constant-language   { color: #0550ae; }
+  .tk-identifier          { color: var(--text); }
+  /* ---- XML 染色（浅色）：标签名 / 属性名各一色，属性值沿用 .tk-string ---- */
+  .tk-tag                 { color: #116329; }
+  .tk-attribute           { color: #953800; }
+
+  @media (prefers-color-scheme: dark) {
+    .tk-keyword-declaration { color: #ff7b72; }
+    .tk-keyword-control     { color: #ff7b72; }
+    .tk-keyword-hard        { color: #ff7b72; }
+    .tk-keyword-soft        { color: #d2a8ff; }
+    .tk-keyword             { color: #ff7b72; }
+    .tk-storage-modifier    { color: #79c0ff; }
+    .tk-preproc             { color: #ffa657; }
+    .tk-string              { color: #a5d6ff; }
+    .tk-string-quoted-single { color: #a5d6ff; }
+    .tk-string-template     { color: #ffa657; }
+    .tk-comment-line        { color: #8b949e; }
+    .tk-comment-block       { color: #8b949e; }
+    .tk-comment-documentation { color: #8b949e; }
+    .tk-number              { color: #79c0ff; }
+    .tk-annotation          { color: #ffa657; }
+    .tk-function-call       { color: #d2a8ff; }
+    .tk-function-declaration { color: #d2a8ff; font-weight: 500; }
+    .tk-function-reference  { color: #d2a8ff; }
+    .tk-type                { color: #ffa657; }
+    .tk-type-class          { color: #ffa657; font-weight: 500; }
+    .tk-package             { color: #e6edf3; }
+    .tk-variable-language   { color: #79c0ff; font-style: italic; }
+    .tk-variable-parameter  { color: #ffa657; }
+    .tk-string-escape       { color: #79c0ff; }
+    .tk-keyword-other       { color: #ffa657; }
+    .tk-operator            { color: #ff7b72; }
+    .tk-constant-language   { color: #79c0ff; }
+    /* ---- XML 染色（深色）---- */
+    .tk-tag                 { color: #7ee787; }
+    .tk-attribute           { color: #ffa657; }
+  }
+  .ed-empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px; color: var(--muted); font-size: 13px;
+  }
+  .dot-dirty { color: var(--danger); }
+
+  /* 对比面板（编辑区里那块，不是弹窗）：和预览一样占满，自己滚 */
+  .ed-diff {
+    flex: 1; overflow: auto; padding: 10px 14px; background: var(--bg);
+    font-size: 12px; color: var(--muted);
+  }
+  /* ---------- markdown 预览 ---------- */
+  .md-view {
+    flex: 1; overflow: auto; padding: 14px 18px; background: var(--bg);
+    font-size: 14px; line-height: 1.75; word-break: break-word;
+  }
+  /* 媒体预览（media_preview 插件）：和 markdown 预览共用 #edPreviewBox，
+     所以这里只补它自己那几个元素 —— 容器本身（.md-view）样式照旧。
+     padding 去掉：看图的画布越大越好，四周留白反而浪费编辑区。 */
+  .md-view[data-media="1"] { padding: 0; overflow: hidden; display: flex; }
+  .md-view .mp-img {
+    margin: auto; max-width: 100%; max-height: 100%; object-fit: contain;
+    /* 棋盘格背景：透明 PNG 在深色底上会看不清边界 */
+    background-image:
+      linear-gradient(45deg, #1b1f26 25%, transparent 25%),
+      linear-gradient(-45deg, #1b1f26 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #1b1f26 75%),
+      linear-gradient(-45deg, transparent 75%, #1b1f26 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
+  .md-view .mp-frame { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
+  .md-view .mp-hint {
+    margin: auto; color: var(--muted); font-size: 13px;
+    text-align: center; max-width: 82%;
+  }
+  /* 失败原因下面的补充行（文件路径 / 处理建议）：比主提示弱一档，别抢视线。
+     路径可能很长，break-all 让它自己折，不然会把编辑区撑出横向滚动条。 */
+  .md-view .mp-hint .mp-sub {
+    margin-top: 6px; font-size: 12px; opacity: .75; word-break: break-all;
+  }
+  .md-view h1, .md-view h2, .md-view h3,
+  .md-view h4, .md-view h5, .md-view h6 { margin: 1.2em 0 .5em; line-height: 1.3; }
+  .md-view h1 { font-size: 1.7em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+  .md-view h2 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: .25em; }
+  .md-view h3 { font-size: 1.18em; }
+  /* h4/h5/h6 以前没写 font-size，落到 UA 默认：h4 = 1em、h5 = .83em、h6 = .67em。
+     h4 于是和 `**加粗**` 的 <strong> 像素级同款（都是 14px bold），只有 margin 差一点；
+     h5/h6 更糟，比正文还小，暗色主题下几乎读不出来。
+     MD 里 #### 是最常用的分节层级（见 md/ 下几十篇记录），必须能一眼认出是标题。
+     中文黑体只有 400/700 两档，font-weight:600 会被渲染成 700，靠字重分不开，
+     只能用「形状 + 字号 + 颜色」区分 —— 左侧竖线是技术文档里最省版面的标记法。 */
+  .md-view h4 {
+    font-size: 1em; font-weight: 700; color: var(--text);
+    border-left: 3px solid var(--accent); padding-left: .55em;
+  }
+  .md-view h5 { font-size: .95em; font-weight: 700; color: var(--text); }
+  .md-view h6 { font-size: .9em; font-weight: 700; color: var(--muted); }
+  .md-view > *:first-child { margin-top: 0; }
+  /* markdown 目录（md_preview 插件）：标题够多时左侧出一条可收起的目录。
+     走 data-* 标记改 .md-view 布局，和上面媒体预览 `[data-media="1"]` 是同一
+     套写法 —— 插件打标记，内核不认识插件名也不认识这套 CSS。 */
+  .md-view[data-toc="1"] { padding: 0; overflow: hidden; display: flex; }
+  .mdx-wrap { flex: 1; display: flex; min-width: 0; min-height: 0; }
+  .mdx-toc {
+    flex: 0 0 var(--mdx-w, 220px); min-width: 0;
+    overflow: auto; padding: 6px 6px 14px;
+    border-right: 1px solid var(--border);
+    font-size: 12px; line-height: 1.5;
+  }
+  /* 收起态只留一条 22px 的竖带，铰链按钮还在原位，不会"点一次就找不回来" */
+  .mdx-toc.collapsed { flex: 0 0 22px; padding: 6px 0; overflow: hidden; border-right: 0; }
+  .mdx-bar { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+  .mdx-t {
+    background: none; border: 0; color: var(--muted); cursor: pointer;
+    font-size: 12px; line-height: 1; padding: 3px 5px; border-radius: 4px;
+  }
+  .mdx-t:hover { background: var(--hover); color: var(--text); }
+  /* 目录项：长标题一行截断，靠 title 提示看全 —— 让它折行会把侧栏撑成两倍高 */
+  .mdx-i {
+    display: block; padding: 3px 8px; color: var(--muted); cursor: pointer;
+    border-radius: 4px; text-decoration: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mdx-i:hover { background: var(--hover); color: var(--text); }
+  .mdx-i.on { color: var(--accent); background: var(--hover); font-weight: 600; }
+  /* 正文自带滚动和留白（.md-view 的 padding 已被 data-toc 归 0），
+     min-width:0 是给长代码块 / 表格的：不写会被内容撑宽，横向滚动条跑到整块外面 */
+  .mdx-body {
+    flex: 1; min-width: 0; overflow: auto; padding: 14px 18px;
+  }
+  .mdx-body > *:first-child { margin-top: 0; }
+  .md-view p { margin: .7em 0; }
+  .md-view ul, .md-view ol { margin: .6em 0; padding-left: 1.7em; }
+  .md-view li { margin: .25em 0; }
+  .md-view blockquote {
+    margin: .8em 0; padding: .1em 1em; color: var(--muted);
+    border-left: 3px solid var(--border);
+  }
+  .md-view hr { border: none; border-top: 1px solid var(--border); margin: 1.4em 0; }
+  .md-view a { color: var(--accent); }
+  /* 正文里能点开编辑器的文件路径（mdToHtml 生成，聊天与 Markdown 预览共用）。
+     平时不加下划线 —— 一屏十几条路径全带下划线像报错；hover 才提示可点。
+     code.md-code 里是路径本身，颜色还得是正文色，别被外层 <a> 染成链接蓝。 */
+  .file-jump { cursor: pointer; text-decoration: none; }
+  .file-jump:hover { text-decoration: underline; }
+  .file-jump code.md-code { color: var(--text); }
+  .md-view code.md-code {
+    background: var(--code); padding: .12em .4em; border-radius: 4px;
+    font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace;
+  }
+  .md-view pre.md-pre {
+    background: var(--code); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; overflow: auto; margin: .8em 0;
+  }
+  .md-view pre.md-pre code {
+    font: 12.5px/1.6 Consolas, "Cascadia Mono", monospace; white-space: pre;
+  }
+  /* Markdown 表格：边框淡一些，表头加粗，避免和普通文字混在一起 */
+  .md-view table.md-table {
+    border-collapse: collapse; margin: .8em 0; font-size: 13px;
+  }
+  .md-view table.md-table th,
+  .md-view table.md-table td {
+    border: 1px solid var(--border); padding: 5px 10px; text-align: left;
+  }
+  .md-view table.md-table th { background: var(--code); font-weight: 600; }
+  .node {
+    display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 0;
+    white-space: nowrap; font-size: 13px; cursor: default; user-select: none;
+  }
+  .node:hover { background: var(--hover); }
+  .node.sel { background: var(--accent); color: #fff; }
+  /* 快速跳转的命中态 / 当前项。
+     刻意**不复用** `.node.sel`：`.sel` 是 Del 键删除的依据（40-tree.js 里
+     `treeBox.querySelector(".node.sel")`），跳转只是"跳过去看一眼"，
+     顺手改掉选中态，就等于敲两个字母后按一下 Del 删掉了一个无辜的文件。 */
+  .node.tf-hit { background: rgba(255, 200, 0, .20); }
+  .node.tf-cur {
+    outline: 1px solid var(--accent); outline-offset: -1px;
+    background: rgba(255, 200, 0, .30);
+  }
+  .node .arrow { width: 14px; text-align: center; color: var(--muted); flex-shrink: 0; font-size: 10px; }
+  .node.sel .arrow { color: #fff; }
+  .node .ico { flex-shrink: 0; width: 15px; text-align: center; opacity: .9; }
+  /* 源码文件的字母标识（K / C / J / X / Py …）：让人一眼看出这是源码，
+     而不是一堆长得一样的 📄。标识由 data-ic 带过来（插件声明的优先，
+     内核兜底表补通用文本类），颜色只在这里分配 —— 插件那边只给字母。
+
+     ⚠ 只覆盖 `.src` 这一态：`.node .ico` 原规则还要管 emoji（📁/📂/📄）
+     的宽度与透明度，`.node.sel` 的白字态也还靠它，不能顺手改掉。 */
+  .node .ico.src {
+    /* 宽度沿用 .node .ico 的 15px，**不放大** —— 放大会让「有标识的行」
+       比「还是 📄 的行」多缩进几像素，一列文件名就对不齐了。
+       15px 用 9px 字号塞得下两个字符（Py / Js）。 */
+    font-size: 9px; font-weight: 700; line-height: 1;
+    letter-spacing: -.3px; opacity: 1;
+    font-family: var(--mono);
+    color: var(--accent);
+  }
+  /* 按标识分色。用精确匹配（[data-ic="C"] 不会命中 "Css"），
+     所以每个标识独立成条，不加通配。 */
+  .node .ico.src[data-ic="C"]   { color: #4a9eff; }   /* C / C++ / 头文件 */
+  .node .ico.src[data-ic="J"]   { color: #e8913a; }   /* Java */
+  .node .ico.src[data-ic="K"]   { color: #a97bf0; }   /* Kotlin */
+  .node .ico.src[data-ic="X"]   { color: #38b48b; }   /* XML 家族 */
+  .node .ico.src[data-ic="Py"]  { color: #4a8fd8; }
+  .node .ico.src[data-ic="Js"],
+  .node .ico.src[data-ic="Ts"]  { color: #d4a017; }
+  .node .ico.src[data-ic="Md"]  { color: #8b95a3; }
+  /* 选中行是白字底（.node.sel 的 color:#fff 只作用于正文，ico 是独立
+     元素，得单独压成白色，否则蓝字压在蓝底上几乎看不见）。 */
+  .node.sel .ico.src { color: #fff; }
+  .node .nm { overflow: hidden; text-overflow: ellipsis; }
+  .node.loading .nm { color: var(--muted); font-style: italic; }
+  /* 起过别名的工作区标签：名字底下一条点线。
+     不是为了好看，是让人知道"这个字是自己起的、不是目录真名" ——
+     否则过一阵会以为磁盘上那个目录真叫这个，去资源管理器里找不到。 */
+  .ws-tab.aliased { text-decoration: underline dotted; text-underline-offset: 3px; }
+  /* 远程工作区（ssh://）的标签：虚线边框，一眼看出它不是本地目录 */
+  .ws-tab.remote { border-style: dashed; }
+  .ws-tab.remote.on { border-style: solid; }
+  /* 文件树里「本地数据」和远程那棵树之间的分界线 */
+  .tree-sep { margin: 5px 10px; border-top: 1px solid var(--border); }
+
+  /* ---------- 拖拽移动 ---------- */
+  /* 被拖的那行变淡（跟文件管理器一样，让你知道"手里拿着的是它"） */
+  .node.dragging { opacity: .4; }
+  /* 能放：实线主色框；不能放：红色虚线 —— 光"没反应"最容易让人以为功能坏了 */
+  .node.drop-ok, #tree.drop-ok {
+    background: rgba(47, 111, 237, .16);
+    outline: 1px solid var(--accent); outline-offset: -1px;
+  }
+  .node.drop-bad, #tree.drop-bad {
+    outline: 1px dashed var(--danger); outline-offset: -1px;
+  }
+  /* 拖到树的空白处 = 挪回工作区根，整块区域高亮 */
+  #tree.drop-ok { outline-offset: -2px; }
+
+  /* ---------- 任务中心（左下角进度） ---------- */
+  /* 收起时只有一行标题，展开后列任务。有任务才显示，没有时整个 hidden。
+     定位方式：浮在 .main 左下角，**不占布局、不受面板折叠影响**。
+     以前是塞在会话面板的 .panel-body 里当普通块，右栏一折叠就整个看不见了。 */
+  .task-box {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 40;
+    width: min(360px, calc(100% - 20px));
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .task-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    cursor: default;
+  }
+  .task-title { font-weight: 600; color: var(--text); }
+  .task-count { color: var(--muted); flex: 1; }
+  .task-count.bad { color: var(--danger); }
+  .task-count.good { color: var(--ok); }
+  .task-fold {
+    border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; padding: 0 2px; font-size: 12px; line-height: 1;
+  }
+  .task-fold:hover { color: var(--text); }
+  /* ---- 任务总览（活动栏底部 ⏱）：会话 / 终端 / 上传 / 下载 + 实时耗时 ---- */
+  .tk-modal { width: min(540px, 92vw); }
+  .tk-board { max-height: 56vh; overflow-y: auto; }
+  .tk-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 2px; border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .tk-row:last-child { border-bottom: none; }
+  .tk-row.done { opacity: .5; }
+  .tk-row.bad .tk-time { color: var(--danger); }
+  .tk-row:hover { background: var(--hover); }
+  .tk-g {
+    flex: 0 0 auto; font-size: 10px; line-height: 15px;
+    padding: 0 6px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .tk-g.tk-chat { color: var(--accent); border-color: currentColor; }
+  .tk-g.tk-term { color: var(--ok); border-color: currentColor; }
+  .tk-name {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .tk-pct { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+  .tk-time {
+    flex: 0 0 auto; color: var(--muted); font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 任务总览：分组标题（现在在跑 / 最近运行过）+ 历史任务详情 */
+  .tk-group {
+    display: flex; align-items: center; gap: 8px;
+    margin: 10px 0 2px; font-size: 11px; font-weight: 500;
+    color: var(--muted);
+  }
+  .tk-group .tbtn { margin-left: auto; }
+  /* 任务列表按工作区分组的组头：项目名 + （当前），别的项目点一下切过去 */
+  .tk-group-ws { margin-top: 14px; }
+  .tk-group-ws:first-child { margin-top: 10px; }
+  .tk-ws-name {
+    font-weight: 600; color: var(--text); min-width: 0;
+    max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .tk-group-ws:not(.cur):hover .tk-ws-name { color: var(--accent); }
+  .tk-ws-tag {
+    flex: 0 0 auto; font-size: 10px; line-height: 15px; padding: 0 6px;
+    border-radius: 999px; border: 1px solid currentColor; color: var(--accent);
+  }
+  .tk-hist { margin-top: 4px; }
+  .tk-row.hist { cursor: pointer; }
+  .tk-ws {
+    flex: 0 0 auto; max-width: 96px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    font-size: 10px; color: var(--muted);
+    padding: 0 5px; border: 1px solid var(--border); border-radius: 999px;
+  }
+  .tk-detail { padding: 6px 2px 10px; border-bottom: 1px solid var(--border); }
+  .tk-meta {
+    font-size: 11px; color: var(--muted);
+    margin-bottom: 6px; word-break: break-all;
+  }
+  .tk-out {
+    margin: 0 0 6px; max-height: 200px; overflow: auto;
+    padding: 8px; border-radius: 6px;
+    background: var(--bg); border: 1px solid var(--border);
+    font: 11px/1.55 Consolas, "Cascadia Mono", monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .task-list { max-height: 30vh; overflow-y: auto; padding: 0 10px 8px; }
+  .task-item { margin-top: 7px; }
+  .task-item:first-child { margin-top: 0; }
+
+  .task-line { display: flex; align-items: center; gap: 8px; }
+  .task-name {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text);
+  }
+  .task-state { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .task-item.ok .task-state { color: var(--ok); }
+  .task-item.err .task-state { color: var(--danger); }
+  .task-x {
+    flex: 0 0 auto; border: 0; background: transparent;
+    color: var(--muted); cursor: pointer; padding: 0 2px; line-height: 1;
+  }
+  .task-x:hover { color: var(--danger); }
+
+  .task-bar {
+    height: 3px; margin-top: 4px;
+    background: var(--hover); border-radius: 2px; overflow: hidden;
+  }
+  .task-fill {
+    height: 100%; width: 0;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width .18s ease-out;
+  }
+  .task-item.ok .task-fill { background: var(--ok); }
+  .task-item.err .task-fill { background: var(--danger); width: 100% !important; }
+  /* 总大小未知（比如后端流式返回）时走循环动画，别让进度条永远躺着不动 */
+  .task-fill.indet {
+    width: 35% !important;
+    animation: taskIndet 1.1s ease-in-out infinite;
+  }
+  @keyframes taskIndet {
+    0%   { margin-left: 0; }
+    50%  { margin-left: 65%; }
+    100% { margin-left: 0; }
+  }
+
+  .task-sub {
+    margin-top: 3px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .task-item.err .task-sub { color: var(--danger); }
+
+  /* 拖文件悬停在会话区上方时的提示。
+     选择器跟 JS 的落点一致：落点已放宽到整个 `#chatPanel`（见 30-chat.js
+     bindChatDrop），所以高亮也画在面板上。老代码写的是 `#messages`，
+     那个 id 在 index.html 里根本不存在（只有 #sessPanels），从来没生效过。 */
+  .panel-chat.drop-into {
+    outline: 2px dashed var(--accent);
+    outline-offset: -6px;
+    background: rgba(47, 111, 237, .06);
+  }
+  /* 提示文字用 fixed 而不是 absolute：面板里既有滚动容器（.sess-panel），
+     又有固定高度的输入区，绝对定位的伪元素会跟着内容滚 —— 聊天滚到底时
+     提示正好滚出视口，而那才是最常拖文件的状态。祖先链上没有
+     transform/filter/contain:paint，fixed 不会被改写包含块。 */
+  .panel-chat.drop-into::after {
+    content: "松开即可加入对话";
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--accent); color: #fff;
+    padding: 6px 14px; border-radius: 8px;
+    font-size: 13px; pointer-events: none;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+
+  /* ---------- 聊天 ---------- */
+  /* overflow-x: hidden 是硬保险：任何漏网的长串都不会把整页推出横向滚动条，
+     宁可被裁一行，也不要让你左右拖着看消息。 */
+  .messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 14px 0 6px; position: relative; }
+  /* 坑：这条 .wrap 以前只有 max-width/padding，被 JS 里的内联 width:100% 盖住了。
+     现在 JS 不再写死宽度，这里负责让它能收缩（min-width:0）并留出左右间距。 */
+  .wrap { flex: 1 1 auto; min-width: 0; max-width: 100%; margin: 0 auto; padding: 0 12px; box-sizing: border-box; }
+  .row { display: flex; margin-bottom: 12px; min-width: 0; }
+  .row > * { min-width: 0; }   /* flex 子项默认 min-width:auto，长内容会把气泡撑出屏幕右侧 */
+  .row.user { justify-content: flex-end; }
+  /* 会话顶部「加载更早的 N 条」：界面历史按页加载（见 30-chat.js 的 loadOlder），
+     这一行只在还有更旧的记录时出现。刻意做得比气泡轻 —— 它是工具，不是内容。 */
+  .row.load-more { justify-content: center; margin: 2px 0 14px; }
+  .row.load-more button {
+    font-size: 12px; line-height: 1.6; padding: 3px 12px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--panel); color: var(--muted); cursor: pointer;
+  }
+  .row.load-more button:hover { color: var(--text); border-color: var(--accent); }
+  .row.load-more button:disabled { opacity: .5; cursor: default; }
+  /* 模型的「思考过程」（reasoning_content）：**默认折叠**，点标题展开。
+     reasoning 动辄几千字，默认铺开会把答案挤到屏幕外；折叠后只留一行标题。
+     刻意做得比正文淡、窄一条 —— 它是过程，不是结论，别和答案抢注意力。 */
+  .think {
+    margin: 0 0 8px; padding: 2px 0 2px 10px;
+    border-left: 2px solid var(--border); max-width: min(680px, 100%);
+  }
+  .think-h {
+    font-size: 11px; color: var(--muted); cursor: pointer; user-select: none;
+  }
+  .think-h:hover { color: var(--text); }
+  /* 还在思考：标题轻微脉动。折叠着也看得出"它没卡住"，比转圈省地方。 */
+  .think-h.live { color: var(--accent); animation: think-pulse 1.4s ease-in-out infinite; }
+  @keyframes think-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+  .think-body {
+    display: none; margin: 6px 0 0; font-size: 12px; line-height: 1.7;
+    color: var(--muted); white-space: pre-wrap; word-break: break-word;
+    max-height: 320px; overflow: auto;
+    /* 滚到头 / 内容不足一屏时别把滚动链甩给外层会话面板：
+       否则"在读思考过程"会变成"会话被滚走"，而会话一滚就取消自动跟随，
+       看上去像刚展开的块自己塌回去了（滚轮那侧另见 thinkBindScroll）。 */
+    overscroll-behavior: contain;
+  }
+  .think.open .think-body { display: block; }
+  .bubble {
+    /* 以前是 min(820px, 86%)：窗口一窄，86% 再叠上 wrap 的 12px padding 就超过 100%，
+       右侧被裁、还逼出横向滚动。现在按父容器算，并留出 padding 余量。
+       max-width 之外还靠 margin-left/right:auto 让气泡按内容自适应，
+       短消息不再拉成满宽的一大块（看着"太宽"就是这个原因）。 */
+    max-width: min(680px, 100%);
+    width: fit-content;          /* 短消息按内容宽度，不再拉成满宽的一大块 */
+    align-self: flex-start;      /* 在 column 容器里不要被拉伸成满宽 */
+    box-sizing: border-box; padding: 10px 14px; border-radius: 12px;
+    /* 气泡现在渲染 Markdown（mdToHtml），不能再整体 pre-wrap：
+       否则每个源码换行都会变成 <br> 效果的空白，表格/列表全乱。
+       改成 normal，空行由 Markdown 的段落规则负责。 */
+    white-space: normal;
+    word-break: break-word; overflow-wrap: anywhere;
+    border: 1px solid var(--border); background: var(--panel);
+    border-bottom-left-radius: 4px;
+  }
+  /* 任务台（独立窗口）的消息也是「气泡」结构，用户气泡沿用同一套配色，
+     见 37-detached.js 的 dtMsgRow；不另写一份颜色，免得两边慢慢走偏。 */
+  .row.user .bubble, .dt-msg.user .bubble {
+    background: var(--accent); color: #fff; border-color: transparent;
+    border-bottom-left-radius: 12px; border-bottom-right-radius: 4px;
+    align-self: flex-end;        /* 用户消息仍然靠右 */
+  }
+  .bubble.error { border-color: var(--danger); color: var(--danger); }
+  /* 气泡里的 Markdown：.bubble 不在 .md-view 里，上面那套规则管不到，
+     这里补一份等价的。表格在聊天里最常见（排查结论、方案对比都要用）。
+     阶段结论（.stage-done-body）现在也是 md 渲染的产物，同一批标记 —— 用 :is()
+     并列两者，不复制第二份规则：复制了以后改一处忘一处，两边排版会慢慢分叉。 */
+  :is(.bubble, .stage-done-body) > *:first-child { margin-top: 0; }
+  :is(.bubble, .stage-done-body) > *:last-child { margin-bottom: 0; }
+  :is(.bubble, .stage-done-body) :is(h1, h2, h3, h4, h5, h6) {
+    margin: .75em 0 .4em; line-height: 1.35; font-weight: 600;
+  }
+  :is(.bubble, .stage-done-body) h1 { font-size: 17px; }
+  :is(.bubble, .stage-done-body) h2 { font-size: 16px; }
+  :is(.bubble, .stage-done-body) h3 { font-size: 14.5px; }
+  /* 气泡正文约 13.5px，h4 以前也是 13.5px —— 和 **加粗** 完全同款。
+     竖线仍用 3px（细了在暗色下看不清），靠 padding 收窄到 .45em 把版面省回来。
+     h5/h6 以前一条规则都没有，落到 UA 的 .83em/.67em，比正文还小。 */
+  :is(.bubble, .stage-done-body) h4 {
+    font-size: 13.5px; color: var(--text);
+    border-left: 3px solid var(--accent); padding-left: .45em;
+  }
+  :is(.bubble, .stage-done-body) h5 { font-size: 13px; color: var(--text); }
+  :is(.bubble, .stage-done-body) h6 { font-size: 12.5px; color: var(--muted); }
+  :is(.bubble, .stage-done-body) p { margin: .5em 0; }
+  :is(.bubble, .stage-done-body) :is(ul, ol) { margin: .5em 0; padding-left: 1.5em; }
+  :is(.bubble, .stage-done-body) li { margin: .18em 0; }
+  :is(.bubble, .stage-done-body) blockquote {
+    margin: .6em 0; padding: .2em .9em; color: var(--muted);
+    border-left: 3px solid var(--border);
+  }
+  :is(.bubble, .stage-done-body) hr {
+    border: none; border-top: 1px solid var(--border); margin: 1em 0;
+  }
+  :is(.bubble, .stage-done-body) a { color: var(--accent); }
+  /* 用户气泡的底色**就是** accent，链接沿用上面的颜色等于隐形（点过之后更像
+     消失了）。这里换成白字 + 下划线，靠下划线而不是颜色区分"能点"。
+     任务台里那套气泡同样处理 —— 两边共用配色，别只修一半。 */
+  .row.user .bubble a, .dt-msg.user .bubble a {
+    color: #fff; text-decoration: underline;
+  }
+  .row.user .bubble code.md-code, .dt-msg.user .bubble code.md-code {
+    background: rgba(255, 255, 255, .2); color: #fff;
+  }
+  /* 用户消息里带的附件（后端把文件正文整段拼进 content，见 30-chat.js 的
+     paintUserBubble）。默认只留一行「📎 文件名 · N 行」，点一下才展开正文 ——
+     不然传个日志文件，一条提问就能把对话刷成几千行。 */
+  .att-block {
+    margin: .4em 0; border-radius: 8px; overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .25);
+    background: rgba(255, 255, 255, .12);
+  }
+  .att-head {
+    display: flex; align-items: center; gap: 5px; padding: 3px 9px;
+    font-size: 12px; line-height: 1.6; cursor: pointer; user-select: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .att-head::before { content: "▸"; font-size: 10px; opacity: .85; }
+  .att-block.open .att-head::before { content: "▾"; }
+  .att-head:hover { background: rgba(255, 255, 255, .1); }
+  .att-body {
+    margin: 0; padding: 8px 10px; max-height: 260px; overflow: auto;
+    border-top: 1px solid rgba(255, 255, 255, .2);
+    font: 12px/1.55 Consolas, "Cascadia Mono", monospace;
+    white-space: pre; color: inherit;
+  }
+  :is(.bubble, .stage-done-body) code.md-code {
+    background: var(--code); padding: .12em .4em; border-radius: 4px;
+    font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace;
+  }
+  :is(.bubble, .stage-done-body) pre.md-pre {
+    background: var(--code); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; overflow: auto; margin: .7em 0;
+  }
+  :is(.bubble, .stage-done-body) pre.md-pre code {
+    font: 12.5px/1.6 Consolas, "Cascadia Mono", monospace; white-space: pre;
+  }
+  :is(.bubble, .stage-done-body) table.md-table {
+    border-collapse: collapse; margin: .7em 0; font-size: 13px;
+    max-width: 100%; display: block; overflow-x: auto;  /* 宽表格自己滚，别撑破气泡 */
+  }
+  :is(.bubble, .stage-done-body) table.md-table th,
+  :is(.bubble, .stage-done-body) table.md-table td {
+    border: 1px solid var(--border); padding: 5px 10px; text-align: left;
+  }
+  :is(.bubble, .stage-done-body) table.md-table th {
+    background: var(--code); font-weight: 600;
+  }
+  .bubble .cursor {
+    display: inline-block; width: 7px; height: 15px; margin-left: 2px;
+    background: var(--accent); vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  /* 兜底：光标只在**实时那一行**（.dt-msg.live）里闪。历史重铺出来的气泡本来
+     就没有光标，万一以后哪儿又往历史里塞了 .cursor，也不会出现「一屏蓝方块
+     同时闪」——JS 那边每帧先清后补是主修，这条只是第二道闸。 */
+  .dt-msg:not(.live) .bubble .cursor { display: none; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* 同 bubble：宽度由内容和上限共同约束，不铺满整行。 */
+  .tools { max-width: min(680px, 100%); width: auto; align-self: flex-start; margin: 0 0 10px 0; min-width: 0; box-sizing: border-box; }
+  .tool-row {
+    font: 12px/1.6 Consolas, "Cascadia Mono", monospace;
+    border-left: 2px solid var(--border); padding: 2px 0 2px 10px;
+    margin-bottom: 3px;
+    /* 默认收成一行：工具名 + 参数 + 结果横向排，超宽裁掉省略号。
+       以前是 word-break: break-all，参数一长就折成七八行，把正文顶到屏幕外。
+       想看全文：点行展开，或鼠标悬停看 title。 */
+    display: flex; align-items: baseline; gap: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer; min-width: 0;
+  }
+  .tool-row > span {
+    overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0;
+  }
+  .tool-row .tn { color: var(--accent); font-weight: 500; flex: 0 0 auto; }
+  .tool-row.failed .tn { color: var(--danger); }
+  .tool-row .ta { color: var(--muted); }
+  .tool-row .tr { color: var(--ok); }
+  .tool-row .tr.bad { color: var(--danger); }
+  /* 展开态：整行允许折行，把参数和结果完整露出 */
+  .tool-row.expanded {
+    display: block; white-space: pre-wrap; word-break: break-all;
+    overflow: visible;
+  }
+  .tool-row.expanded > span { display: block; overflow: visible; }
+  .tool-row.expanded .tn { margin-bottom: 2px; }
+
+  .stat-row {
+    max-width: min(820px, 86%); font-size: 12px; color: var(--muted);
+    padding: 2px 0 6px; border-top: 1px dashed var(--border); margin-top: 6px;
+  }
+  .stat-row.limit { color: var(--danger); }
+  .notice { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+
+/* 交付前的同步核对（「校验中…」）：一条**临时**状态行，真事件一到后端就把它撤掉。
+   左边框 + 呼吸：让「这不是模型说的话，是在干活」一眼分得清。 */
+.busy-hint {
+  padding-left: 8px;
+  border-left: 2px dashed var(--border);
+  animation: busyPulse 1.4s ease-in-out infinite;
+}
+@keyframes busyPulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .busy-hint { animation: none; } }
+
+/* 任务台那一行说同一件事（37-detached.js dtPaintChat 铺在轮次末尾） */
+.dt-busy { font-size: 12px; color: var(--muted); padding: 2px 0 6px; }
+
+  /* 多步流程的一步：一条带文字的横线。不用卡片 —— 它只是个分隔，
+     比正文抢眼就喧宾夺主了。 */
+  .stage-bar {
+    display: flex; align-items: center; gap: 10px;
+    margin: 14px 0 8px; font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .stage-bar::before, .stage-bar::after {
+    content: ""; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* 每一步的结论：**默认折叠成一行**（「本步结论 · 交付（N 字，点开看）」）。
+     以前默认展开，可交付步的 conclusion 往往就是模型正文的复述 —— 同一段话
+     一轮里会出现三遍（finish_stage 的参数 / 这里 / 卡片「总结」），
+     看着像交付跑了三次。折成一行，要看再点。 */
+  .stage-done {
+    margin: 0 0 10px; padding: 6px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: rgba(255, 255, 255, .03);
+    font-size: 12.5px;
+  }
+  .stage-done > summary {
+    cursor: pointer; user-select: none; color: var(--muted);
+    font-size: 12px; margin: -2px -2px 4px;
+  }
+  .stage-done:not([open]) > summary { margin-bottom: 0; }
+  /* 内容区是 mdToHtml 的产物（块级元素自带间距），这里**不能**再留
+     white-space: pre-wrap —— 那会把源码里的换行当成排版，段落之间多出空行。 */
+  .stage-done-body {
+    word-break: break-word; line-height: 1.6;
+    color: var(--fg, inherit); opacity: .92;
+  }
+
+  /* 待办清单：常驻在消息区**上方**（不在滚动容器里），模型一调 todo 就更新。
+     以前是聊天流里的一张卡片，任务跑十几轮就滚出视野了 —— 而那时候最想看的
+     恰恰是"还剩什么没做"。 */
+  .todo-dock {
+    flex: 0 0 auto; margin: 0 12px 8px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(255, 255, 255, .03); font-size: 12.5px;
+  }
+  .todo-dock-head {
+    display: flex; align-items: center; gap: 6px;
+    font-weight: 600; cursor: pointer; user-select: none;
+  }
+  .todo-dock-head .spacer { flex: 1 1 auto; }
+  .todo-caret { width: 10px; font-size: 11px; color: var(--muted); }
+  .todo-x {
+    border: 0; background: transparent; color: var(--muted);
+    font-size: 11px; padding: 0 2px; cursor: pointer;
+  }
+  .todo-x:hover { color: var(--danger, #e5534b); text-decoration: underline; }
+  /* 条目多了不能把消息区挤没：面板内部自己滚，高度封顶 */
+  .todo-dock-list {
+    max-height: min(26vh, 260px); overflow-y: auto;
+    margin-top: 4px; padding-right: 2px;
+  }
+  .todo-dock.collapsed .todo-bar,
+  .todo-dock.collapsed .todo-dock-list { display: none; }
+  .todo-bar { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 10px; overflow: hidden; }
+  .todo-bar > i { display: block; height: 100%; background: var(--accent, #4a9eff); border-radius: 2px; transition: width .25s; }
+  .todo-item { display: flex; gap: 8px; line-height: 1.65; }
+  .todo-ic { flex: 0 0 auto; width: 14px; text-align: center; color: var(--muted); }
+  .todo-tx { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .todo-item.done .todo-ic { color: var(--ok, #3fbf6f); }
+  .todo-item.done .todo-tx { color: var(--muted); text-decoration: line-through; }
+  .todo-item.doing .todo-ic { color: var(--accent, #4a9eff); }
+  .todo-item.doing .todo-tx { font-weight: 600; }
+
+  /* 选择题卡片（ask_user）：模型问「选哪个」时弹在消息流里，点一下就把答案
+     送回那一轮。和待办不同，它属于某一步工具调用，选完留在原地当记录。 */
+  .ask-card {
+    max-width: min(680px, 100%); align-self: flex-start;
+    margin: 0 0 10px; padding: 10px 12px;
+    border: 1px solid var(--accent); border-radius: 10px;
+    background: var(--hover);
+  }
+  /* 卡片开头的来源行：这一问是哪个工作区问的。串台那条过滤链挡不住「同一物理
+     工作区、多个标签 ws 算出来一样」的情况（见 30-chat.js 的 askFrom），所以把
+     来源直接标在卡片上，让用户自己分辨。折叠态由下面 `.flat` 隐藏。 */
+  .ask-card .ask-from {
+    font-size: 11.5px; font-weight: 600; line-height: 1.4;
+    color: var(--accent); margin: 0 0 5px;
+    overflow-wrap: anywhere;
+  }
+  .ask-card .ask-q {
+    font-size: 13.5px; line-height: 1.55; margin-bottom: 8px;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .ask-card .ask-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ask-card .ask-opt, .ask-card .ask-ok {
+    font: inherit; font-size: 12.5px; line-height: 1.4;
+    max-width: 100%; padding: 5px 12px; border-radius: 16px;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); cursor: pointer;
+    text-align: left; overflow-wrap: anywhere;
+  }
+  .ask-card .ask-opt:hover, .ask-card .ask-ok:hover { border-color: var(--accent); }
+  /* 选中态：单选是"点了的那一个"，多选是"勾上的那些" */
+  .ask-card .ask-opt.on {
+    border-color: var(--accent); background: var(--accent); color: #fff;
+  }
+  .ask-card .ask-ok { margin-left: auto; font-weight: 600; }
+  /* 「✎ 自定义…」入口：虚线框 + 弱色，和「模型给的选项」区分开，别让人以为
+     它也是一条答案。点开之后原有选项整排藏掉（节点不删：取消要原样恢复，
+     多选已勾的状态也在里面，见 30-chat.js 的 openCustom）。 */
+  .ask-card .ask-custom-btn { border-style: dashed; color: var(--muted); }
+  .ask-card .ask-opts.custom > .ask-opt,
+  .ask-card .ask-opts.custom > .ask-ok { display: none; }
+  .ask-card .ask-custom { display: flex; gap: 6px; flex: 1 1 100%; }
+  .ask-card .ask-custom-in {
+    flex: 1 1 auto; min-width: 0; font: inherit; font-size: 12.5px;
+    padding: 5px 10px; border-radius: 16px;
+    border: 1px solid var(--accent); background: var(--bg); color: var(--text);
+  }
+  .ask-card .ask-custom-in:focus { outline: none; border-color: var(--accent); }
+  .ask-card .ask-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  /* 已作答 / 那一轮已结束：整张卡片退成背景，按钮不再可点 */
+  .ask-card.done { border-color: var(--border); background: transparent; }
+  .ask-card.done .ask-opt, .ask-card.done .ask-ok {
+    cursor: default; opacity: .5; border-color: var(--border);
+  }
+  .ask-card.done .ask-opt:hover, .ask-card.done .ask-ok:hover { border-color: var(--border); }
+  .ask-card.done .ask-opt.on { opacity: 1; color: var(--text); background: var(--panel); border-color: var(--accent); }
+  /* 折叠态（已作答 / 已失效）：整张卡退成一行小字，跟着消息流正常滚走。
+     卡片是追加在消息流末尾的，选完还占着「问题 + 一排按钮 + 提示」三行高度，
+     就会一直像一块钉在底部的东西 —— 用户要看的是「我当时选了啥」这行文字，
+     不是一张一直停在最下面的答题框。折叠由 collapseAsk()（30-chat.js）负责。 */
+  .ask-card.flat {
+    border-color: transparent; background: transparent;
+    padding: 0; margin: 0 0 6px; color: var(--muted);
+  }
+  .ask-card.flat .ask-q { font-size: 12px; line-height: 1.5; margin-bottom: 0; }
+  /* 折叠态只剩「✓ 已选择：X」这一行记录，来源行跟着一起收掉 —— 理由同上：
+     留着就是两行，又变回一块占位的东西。 */
+  .ask-card.flat .ask-from { display: none; }
+  .ask-card.flat.bad .ask-q { color: var(--danger); }
+
+  /* ---------- 思考框停靠位 ---------- */
+  /* 模型思考期间，那一块被挪到这里：钉在输入框上方，消息列表怎么滚都不动。
+     思考结束块就归位回消息里，这一条随之收起（.hidden）。 */
+  .think-dock {
+    flex-shrink: 0; padding: 0 12px;
+    background: var(--bg);          /* 压住底下滚上来的消息，不留半行残影 */
+    border-top: 1px solid var(--border);
+  }
+  .think-dock .think { margin: 6px auto; }
+  /* 停靠时正文可以再高一点 —— 这一块不占消息流，收起来也方便 */
+  .think-dock .think-body { max-height: 40vh; }
+  /* 任务台的那一条：边距对齐日志区（16px），其余完全沿用 .think-dock */
+  .dt-think-dock { padding: 0 16px; }
+  .dt-think-dock .think-body { max-height: 36vh; }
+
+  /* ---------- 输入 ---------- */
+  .composer { flex-shrink: 0; padding: 8px 12px 12px; }
+  .composer-inner {
+    max-width: 100%; margin: 0 auto; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px;
+  }
+  .composer-inner:focus-within { border-color: var(--accent); }
+  .attn { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  /* ---------- 发送排队 ---------- */
+  /* 生成中再按回车：不丢、不打断，排在这里；这轮结束自动发下一条 */
+  .sendq {
+    margin: 0 0 6px; padding: 3px 6px 4px;
+    border: 1px dashed var(--border); border-radius: 8px;
+    background: var(--bg); max-height: 132px; overflow-y: auto;
+  }
+  .sendq .sq-head { font-size: 11px; color: var(--muted); padding: 1px 2px 3px; }
+  .sendq .sq-row { display: flex; align-items: center; gap: 6px; padding: 1px 2px; }
+  .sendq .sq-n { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+  .sendq .sq-text {
+    flex: 1; min-width: 0; font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sendq .sq-acts { flex: 0 0 auto; display: flex; gap: 4px; }
+  .sendq .sq-acts button {
+    font: inherit; font-size: 11px; padding: 1px 7px; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); cursor: pointer;
+  }
+  .sendq .sq-acts button:hover { background: var(--hover); }
+  .sendq .sq-acts button.danger { color: var(--danger); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 3px 6px 3px 10px; border-radius: 6px; max-width: 340px;
+  }
+  .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip-img {
+    width: 26px; height: 26px; object-fit: cover;
+    border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0;
+  }
+  .chip button { border: none; background: none; color: var(--muted); padding: 0 2px; }
+  .chip button:hover { color: var(--danger); }
+  .inputrow { display: flex; gap: 10px; align-items: flex-end; }
+  .inputrow textarea {
+    flex: 1; border: none; outline: none; resize: none; background: transparent;
+    max-height: 190px; min-height: 24px; padding: 4px 2px; line-height: 1.6;
+  }
+  /* 发送那一列：上面一排「压缩 + 新会话」，下面一颗宽一点的发送键 */
+  .sendcol {
+    flex-shrink: 0; display: flex; flex-direction: column; gap: 6px;
+    min-width: 132px; align-self: stretch; justify-content: flex-end;
+  }
+  .sendcol button { width: 100%; }
+  .sendcol-top { display: flex; align-items: stretch; gap: 6px; }
+  /* 上排：压缩占满剩余宽度、新会话按内容宽。（width:auto 必须写 ——
+     `.sendcol button` 那条 width:100% 会让压缩把整排撑爆） */
+  .sendcol-top #compactBtn,
+  .dt-sendcol .sendcol-top #dtCompact {
+    flex: 1 1 auto; min-width: 0; width: auto;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  /* 压缩：和发送键同宽的次按钮 */
+  #compactBtn {
+    padding: 5px 10px; font-size: 12px; font-family: inherit;
+    border: 1px solid var(--border); background: transparent;
+    border-radius: 8px; color: var(--muted); white-space: nowrap;
+  }
+  #compactBtn:hover { background: var(--hover); color: var(--text); }
+  /* 新会话：**勾选式**。勾上后点发送 = 先新建会话，再把这条消息发进去
+     （发完自动取消勾选，免得每条消息都开一个新会话）。 */
+  .sendchk {
+    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    padding: 4px 7px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 12px; color: var(--muted); cursor: pointer;
+    white-space: nowrap; user-select: none;
+  }
+  .sendchk:hover { background: var(--hover); color: var(--text); }
+  .sendchk.on { border-color: var(--accent); color: var(--accent); }
+  .sendchk input { margin: 0; accent-color: var(--accent); cursor: pointer; }
+  /* 智能体选择：输入框上方一排胶囊按钮（模式多了自动换行）。
+     不用下拉是为了"一眼看到有哪几个模式"—— 下拉要展开才知道有什么，
+     而这个功能的重点就是让人随时发现并切换。 */
+  .modebar { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 2px 7px; }
+  .modebar:empty { display: none; }
+  .modebtn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: transparent; color: var(--muted); font-size: 12px;
+    font-family: inherit; line-height: 1.5; cursor: pointer; white-space: nowrap;
+  }
+  .modebtn:hover { background: var(--hover); color: var(--text); }
+  .modebtn.on { border-color: var(--accent); color: var(--accent); }
+  .modebtn .mi { font-size: 11px; opacity: .9; }
+  #sendBtn {
+    flex-shrink: 0; padding: 9px 18px; border: none; border-radius: 8px;
+    background: var(--accent); color: #fff; font-weight: 500;
+  }
+  #sendBtn.stop { background: var(--danger); }
+  #sendBtn:disabled { opacity: .5; }
+
+  /* ---------- Logcat 面板（开在编辑区，占住那一栏） ---------- */
+  .logcat-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .logcat-bar {
+    display: flex; align-items: center; gap: 5px;
+    padding: 5px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .logcat-bar.wrap { flex-wrap: wrap; row-gap: 5px; }
+  /* 过滤框是**白底**（跟深色工具栏对比明显），所以文字必须显式给深色：
+     不写 color 时浏览器用默认的 fieldtext，加上继承来的浅色会让输入内容/占位符
+     变成白底灰字，基本看不清。 */
+  .logcat-bar input[type="text"] {
+    width: 96px; font-size: 12px; padding: 3px 6px;
+    background: #fff; color: #111; caret-color: #111;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .logcat-bar input[type="text"]::placeholder { color: #555; opacity: 1; }
+  .logcat-bar label.lgchk {
+    display: flex; align-items: center; gap: 3px; white-space: nowrap;
+    font-size: 11px; color: var(--muted);
+  }
+  /* 底部状态栏常驻：ps 快照行数、落盘行数、重连次数这些"面板上看不见"的事实 */
+  .logcat-status {
+    flex-shrink: 0; padding: 3px 10px; font-size: 11px; color: var(--muted);
+    border-top: 1px solid var(--border); cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* 级别开关：一个小方块一个级别，可乱选（原版是集合不是阈值） */
+  .lvbtn {
+    display: inline-block; min-width: 17px; text-align: center;
+    padding: 1px 3px; margin-right: 2px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--border); font-size: 11px; user-select: none;
+    opacity: .4;
+  }
+  .lvbtn.on { opacity: 1; font-weight: 600; }
+  /* 进程列表：活着的实心圈、退出的空心并压暗 */
+  .node.dim .nm, .node.dim .ico { opacity: .45; }
+  .node .desc {
+    color: var(--muted); font-size: 11px; margin-left: 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .node.sect {
+    color: var(--muted); font-weight: 600; font-size: 11px;
+    letter-spacing: .03em;
+  }
+
+  /* ---------- 终端 ---------- */
+  .term {
+    flex-shrink: 0; height: 260px; background: var(--panel);
+    border-top: 1px solid var(--border); display: flex; flex-direction: column;
+    min-height: 120px;
+  }
+  /* 顶部的拖动条：6px 高、上移 3px 压住边界线，鼠标移上去才显色。
+     不做成常亮的一条，是因为终端上面紧挨着会话区，常亮会像多出一条分隔线。 */
+  .term-resize {
+    height: 6px; margin-top: -3px; flex: 0 0 auto;
+    cursor: ns-resize; background: transparent;
+  }
+  .term-resize:hover, .term-resize.dragging {
+    background: var(--accent); opacity: .55;
+  }
+  .term-head {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted);
+    overflow: hidden;
+  }
+  /* 空白占位先被吃掉：原来 flex:1 会先把宽度占满，于是状态行和标签在窄屏下
+     提早就撞到 max-width 上限开始省略号，其实右边还有空地方。
+     min-width:0 让它真能被压到 0。 */
+  .term-head .spacer { flex: 1 1 0; min-width: 0; }
+  .term-head button { border: none; background: none; color: var(--muted); padding: 0 4px; }
+  .term-head button:hover { color: var(--text); }
+  /* 终端标签条：横向滚动，别把右边的按钮挤出去；滚轮不显示滚动条 */
+  .term-tabs {
+    display: flex; align-items: center; gap: 4px; min-width: 0;
+    max-width: 65%; overflow-x: auto; scrollbar-width: none;
+  }
+  .term-tabs::-webkit-scrollbar { display: none; }
+  .term-tab {
+    display: flex; align-items: center; gap: 4px; flex: 0 0 auto;
+    max-width: 180px; padding: 2px 6px 2px 8px; border: 1px solid transparent;
+    border-radius: 6px; cursor: pointer; user-select: none;
+  }
+  .term-tab:hover { background: rgba(127,127,127,.12); }
+  .term-tab.active {
+    background: rgba(127,127,127,.18); border-color: var(--border); color: var(--text);
+  }
+  .term-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .term-tab-x {
+    opacity: .45; padding: 0 3px; border-radius: 3px; line-height: 1;
+    flex: 0 0 auto;
+  }
+  .term-tab-x:hover { opacity: 1; background: rgba(127,127,127,.25); }
+  /* 正在跑命令的标签页：名字后面点个点，切走也知道哪个还在跑 */
+  .term-tab.busy .term-tab-name::after {
+    content: "●"; margin-left: 4px; font-size: 9px; color: var(--accent);
+    vertical-align: middle;
+  }
+  /* 空态：这个工作区还没有终端时，标签条里那颗「＋ 新建终端」 */
+  .term-tab.term-tab-add {
+    color: var(--muted);
+    border: 1px dashed var(--border);
+  }
+  .term-tab.term-tab-add:hover { color: var(--text); }
+  #termNew { font-size: 14px; line-height: 1; padding: 0 6px; }
+  /* 终端状态：运行中的耗时 / 上一次的退出码与用时 / 已停止 */
+  /* flex:0 1 auto —— 可被压缩但不会被拉长占满；40% 是极端窄宽下的兜底，
+     截断后全文靠 title 看（见 updateTermStatus） */
+  .term-status {
+    font-size: 11px; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; max-width: 40%; flex: 0 1 auto; min-width: 0;
+  }
+  .term-status.run { color: var(--accent); }
+  .term-status.ok { color: #3fb950; }
+  .term-status.bad { color: #f85149; }
+  #termStop { color: #f85149; font-size: 11px; }
+  #termStop.hidden { display: none; }
+  #termStop:hover { color: #ff7b72; }
+  /* 终端输出里的 ANSI 颜色（SGR）→ 这 16 个 class。
+     取值是各终端通用的一套（VS Code 暗色 ANSI 板），按"深色底 + 等宽小字"
+     调过亮度：太暗的色（纯 #000000 之类）在这种背景上等于看不见，所以 0 号
+     用中灰。任务台的 .dt-out 共用同一套 —— 两处颜色口径必须一致。 */
+  .term-f0 { color: #6b6b6b; }
+  .term-f1 { color: #f14c4c; }
+  .term-f2 { color: #23d18b; }
+  .term-f3 { color: #f5f543; }
+  .term-f4 { color: #3b8eea; }
+  .term-f5 { color: #d670d6; }
+  .term-f6 { color: #29b8db; }
+  .term-f7 { color: #e5e5e5; }
+  .term-f8 { color: #8a8a8a; }
+  .term-f9 { color: #ff6b6b; }
+  .term-f10 { color: #4ae3a3; }
+  .term-f11 { color: #ffec6b; }
+  .term-f12 { color: #6aa9ff; }
+  .term-f13 { color: #e58ce5; }
+  .term-f14 { color: #4fd6ea; }
+  .term-f15 { color: #ffffff; }
+  .term-g0 { background: #6b6b6b; }
+  .term-g1 { background: #f14c4c; }
+  .term-g2 { background: #23d18b; }
+  .term-g3 { background: #f5f543; }
+  .term-g4 { background: #3b8eea; }
+  .term-g5 { background: #d670d6; }
+  .term-g6 { background: #29b8db; }
+  .term-g7 { background: #e5e5e5; }
+  .term-g8 { background: #8a8a8a; }
+  .term-g9 { background: #ff6b6b; }
+  .term-g10 { background: #4ae3a3; }
+  .term-g11 { background: #ffec6b; }
+  .term-g12 { background: #6aa9ff; }
+  .term-g13 { background: #e58ce5; }
+  .term-g14 { background: #4fd6ea; }
+  .term-g15 { background: #ffffff; }
+  .term-b { font-weight: 700; }
+  .term-d { opacity: .72; }
+  .term-i { font-style: italic; }
+  .term-u { text-decoration: underline; }
+  /* 反显：前景背景互换。子元素的 color 继承不到"反过来的底"，所以直接给死。 */
+  .term-r { background: #e5e5e5; color: #1b1b1b; }
+
+  .term-out {
+    flex: 1; overflow-y: auto; margin: 0; padding: 8px 12px;
+    font: 12px/1.55 Consolas, "Cascadia Mono", monospace;
+    white-space: pre-wrap; word-break: break-all;
+    /* 滚动条槽位常驻：内容一超过一屏，Windows 下会"啪"地插进一条深色竖条，
+       文本宽度跟着变、整段重新折行；清屏或截断时又缩回去 —— 终端里那点
+       闪烁大半来自这里。留固定槽位就不会再挤来挤去。 */
+    scrollbar-gutter: stable;
+  }
+  .term-in { display: flex; border-top: 1px solid var(--border); }
+  /* 输入框是 <textarea rows=1>（不是 input）：粘贴多行时换行不会被浏览器剥掉。
+     高度由 autoGrowBox 撑到内容高，到 40vh 出滚动条，别把上面输出区顶没。 */
+  .term-in input, .term-in textarea {
+    flex: 1; border: none; background: transparent; padding: 8px 12px; outline: none;
+    font: 12px/1.55 Consolas, "Cascadia Mono", monospace;
+    resize: none; max-height: 40vh; overflow-y: auto;
+  }
+
+  /* ---------- 工作空间任务台（只开在独立窗口里） ----------
+     主界面里 #board 一直是 hidden（点顶栏按钮是**新开窗口**，不是展开一栏），
+     所以这里只定义它在独立窗口里的形态：整个窗口铺满。 */
+  .board {
+    position: fixed; inset: 0; z-index: 55;
+    display: flex; background: var(--bg);
+  }
+  .bd-side {
+    flex: 0 0 300px; min-width: 200px; max-width: 42vw;
+    display: flex; flex-direction: column;
+    background: var(--panel); border-right: 1px solid var(--border);
+  }
+  .bd-side-head {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .bd-side-title { flex: 1; font-weight: 600; color: var(--text); }
+  .bd-x {
+    border: none; background: none; color: var(--muted);
+    padding: 2px 6px; border-radius: 5px; font-size: 13px;
+  }
+  .bd-x:hover { color: var(--text); background: var(--hover); }
+  .bd-list { flex: 1; overflow-y: auto; padding: 4px 0 20px; scrollbar-gutter: stable; }
+  .bd-group-head {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px 4px; font-size: 11px; color: var(--muted);
+  }
+  .bd-group-head .nm {
+    min-width: 0; max-width: 190px; font-weight: 600; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bd-group-head:hover .nm { color: var(--accent); }
+  .bd-item {
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 12px; cursor: pointer; font-size: 12px;
+    border-left: 2px solid transparent;
+  }
+  .bd-item:hover { background: var(--hover); }
+  .bd-item.on { background: var(--hover); border-left-color: var(--accent); }
+  /* 空工作区里那行「＋ 新建会话」 */
+  .bd-item-add { color: var(--muted); }
+  .bd-item-add:hover { color: var(--accent); }
+  .bd-item.run .bd-name { color: var(--accent); }
+  /* 左栏「模型在等你答题」徽标。位置在 💬 之前（行首），扫一眼就知道该点哪行。
+   用 --danger 而不是强调色：它是要用户**去处理**的事，不是「正在跑」这种状态。 */
+.bd-ask {
+  flex: 0 0 auto; width: 14px; height: 14px; line-height: 14px;
+  text-align: center; border-radius: 50%;
+  font-size: 10px; font-weight: 700; color: #fff;
+  background: var(--danger);
+}
+.bd-ico { flex: 0 0 auto; opacity: .75; font-size: 11px; }
+/* 会话行的**模式**图标：定宽 + 居中 + 不透明。
+   定宽：emoji 宽度不一（⚡ 窄、🧭 宽），不定宽名字左缘会参差不齐；
+   不透明：.bd-ico 的 .75 会把彩色 emoji 洗成灰的，就看不出模式了；
+   字号 12：比原来 11 略大，扫一眼能分辨。终端行的 🖥 不受影响。 */
+.bd-ico.bd-mode {
+  width: 15px; text-align: center;
+  opacity: 1; font-size: 12px;
+}
+  .bd-name {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bd-time { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+  /* 列表项最右边那个停止键：只在任务正在跑时出现 */
+  .bd-stop {
+    flex: 0 0 auto; border: 1px solid transparent; background: none;
+    color: var(--danger); padding: 0 4px; border-radius: 4px;
+    font-size: 11px; line-height: 16px; cursor: pointer;
+  }
+  .bd-stop:hover { border-color: currentColor; background: var(--hover); }
+  .bd-empty {
+    padding: 18px 14px; color: var(--muted);
+    font-size: 12px; line-height: 1.8; white-space: pre-wrap;
+  }
+  .bd-empty-btns { display: flex; gap: 8px; margin-top: 12px; }
+  .bd-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .bd-head {
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .bd-title {
+    font-weight: 600; font-size: 13px; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bd-status { flex: 0 0 auto; color: var(--muted); }
+  .bd-status.run { color: var(--accent); }
+  .bd-body { flex: 1; min-height: 0; display: flex; }
+  /* position: relative 是聊天区那个「跳到最新」浮动按钮的定位基准 */
+  .bd-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+             position: relative; }
+  /* 搬进来的会话栏：panel-body 本来就是纵向 flex，这里只补满高度 */
+  .bd-pane .panel-body { flex: 1; min-height: 0; }
+  /* 搬进来的终端：主界面里是固定 260px 的底栏，这里要撑满整栏。
+     用户拖过高度的话内联 style.height 还在，所以必须 !important 压过去。 */
+  .bd-pane .term {
+    flex: 1 1 auto; height: 100% !important; min-height: 0; border-top: none;
+  }
+  .bd-pane .term-resize { display: none; }
+
+  /* ---------- 任务台的独立窗口（`/?detached=board`） ----------
+     新窗口里只留任务台：顶栏、活动栏、文件栏、编辑器、会话栏、终端全藏掉。
+     会话和终端跟不跟得上，靠的是后端那份账本（见 37-detached.js 顶部）。 */
+  body.detached-board .topbar,
+  body.detached-board .activity,
+  body.detached-board .panel-files,
+  body.detached-board .panel-editor,
+  body.detached-board .panel-chat,
+  body.detached-board .panel-resize,
+  body.detached-board .term,
+  body.detached-board .task-box { display: none !important; }
+  body.detached-board .main { display: block; }
+
+  /* 流程进度条：任务台轮询 /api/chat/live 拿 stage 画出来，见 37-detached.js
+     的 dtPaintStage。放 dtLog 外面是为了不跟着每轮重铺一起闪。 */
+  .dt-stage {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    padding: 7px 16px; border-bottom: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); user-select: none;
+  }
+  .dt-stage.hidden { display: none; }
+  .dt-stage-item { padding: 2px 7px; border-radius: 9px; border: 1px solid transparent; }
+  /* todo：还没走到；done：走过的；now：正在跑的那一步 */
+  .dt-stage-item.todo { opacity: .45; }
+  .dt-stage-item.done { color: var(--fg); }
+  .dt-stage-item.done::before { content: "✓ "; color: var(--accent); }
+  .dt-stage-item.now {
+    color: #fff; background: var(--accent); border-color: var(--accent);
+    font-weight: 600;
+  }
+  .dt-stage-sep { opacity: .4; }
+  /* 驳回：校验没过退回循环体时单独占一格。
+   * 以前只用「已打回 N 次」角标，时间线上看不到这一步，
+   * 于是「操作1 → 打回 → 操作1 → 操作2」被显示成「操作1 → 操作2」。 */
+  .dt-stage-item.back {
+  color: #e0a030; border-color: rgba(224, 160, 48, .45);
+  background: rgba(224, 160, 48, .10); cursor: help;
+  }
+  .dt-stage-item.back-now {
+  color: #fff; background: #e0a030; border-color: #e0a030;
+  font-weight: 600; animation: dtBackFlash .8s ease-out 2;
+  }
+  /* 闪两下：重来这件事本身值得被看见一眼，但不要一直闪 */
+  @keyframes dtBackFlash {
+  from { box-shadow: 0 0 0 3px rgba(224, 160, 48, .55); }
+  to   { box-shadow: 0 0 0 0 rgba(224, 160, 48, 0); }
+  }
+  /* 打回次数：校验没过退回循环体时累加，用户据此知道"它在返工" */
+  .dt-stage-back { margin-left: 8px; color: #e0a030; }
+  /* 收尾标题行：交付后不收起进度条，改用这一行说明"已完成 + 总耗时"，
+     点一下折叠/展开。以前 running 变 false 就整条 hidden，轨迹直接消失。 */
+  .dt-stage-head {
+    cursor: pointer; opacity: .85; font-weight: 600; flex-basis: 100%;
+  }
+  .dt-stage-head:hover { opacity: 1; text-decoration: underline; }
+  /* 收尾后格子会变多（打回重来的每一步都留在时间线上），
+     每个格子允许收缩，长标签省略而不是把整条撑破。 */
+  .dt-stage-item { max-width: 46%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 独立窗口的详情区：自建的一套简化 DOM（见 37-detached.js） */
+  .dt-log {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 14px 16px; scrollbar-gutter: stable;
+  }
+  /* 日志区顶部的「加载更早」：只在前面还有历史时才出现（见 dtPaintMore）。
+     居中的一颗窄按钮，别做成消息气泡的样子 —— 它不是对话内容。 */
+  .dt-more {
+    display: block; margin: 0 auto 12px; padding: 4px 12px;
+    border: 1px solid var(--border); border-radius: 14px;
+    background: var(--panel); color: var(--muted);
+    font-size: 12px; line-height: 1.5; cursor: pointer;
+  }
+  .dt-more:hover { background: var(--hover); border-color: var(--accent); color: var(--text); }
+  .dt-more:disabled { cursor: default; opacity: .6; }
+/* 超长正文的降级形态：dtMd 里超过 DT_MD_MAX（4 万字）就不再解析 Markdown，
+   直接吐一个 <pre>（见 37-detached.js）。几万字的结论在每秒轮询里反复走
+   mdToHtml 的正则替换会把界面按住，宁可排版朴素也不能让界面停住。
+   这里只保证它不撑破气泡：保留换行、可横向滚、字号跟正文一致。 */
+.dt-md-long {
+  margin: 0; font: inherit;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 60vh; overflow: auto;
+}
+  /* 任务台的消息：和主界面同一个形状 —— 纵向排「工具行 / 正文气泡 / 统计行」。
+     这里只管排列和左右对齐；气泡的底色、圆角、Markdown 规则全部复用
+     .bubble / .tool-row / .stat-row，别再另写一份"简化版排版"。 */
+  /* 屏外消息行按需渲染：任务台一轮能铺二十来条，每条几十个子节点（工具行 /
+     气泡 / 阶段结论），翻过页以后屏外那些行还在参与布局与绘制。
+     口径和主界面 `.sess-panel > .row`（style.css:2254）一致，**必须落在「行」上**，
+     不能落在外层滚动容器 `.dt-log` 上 —— 容器永远在视口里，写在它上面一次都
+     跳不过去，反倒把滚动从合成层降级成主线程滚动（滑起来发涩）。
+     `auto <长度>` 里的 auto 是"记住这一行上次的实际高度"：滚过一次之后不再按
+     120px 估，滚动条不会被反复校正。 */
+  .dt-msg {
+    display: flex; flex-direction: column; align-items: flex-start;
+    margin-bottom: 12px; min-width: 0;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 120px;
+  }
+  /* 钉底那一瞬（换会话 / 首次打开）要拿真实高度：屏外行按 120px 估高，
+     scrollHeight 就偏小，贴底贴不到底。只在 JS 钉底期间（约 300ms）加，
+     结束或用户一动滚轮就摘掉，交回上面的按需渲染。
+     口径同主界面 `.sess-panel > .row.cv-hold`（style.css:2309）。 */
+  .dt-log.cv-hold .dt-msg { content-visibility: visible; }
+  /* 正在写的那一行不加：它在底部、通常就在视口里，加不加都一样；去掉可以避免
+     "刚追加的一段还没被记住高度"时把底部位置估歪（光标 / 自动跟随跟着跳）。 */
+  .dt-msg.live {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
+  }
+  .dt-msg.user { align-items: flex-end; }
+  /* 相邻块之间给点缝：两段正文、正文和工具行、统计行都靠它隔开 */
+  .dt-msg > * + * { margin-top: 6px; }
+  .dt-msg .bubble { max-width: min(680px, 100%); }
+  /* 工具行容器自带 margin-bottom，再叠上「相邻块 6px」会散开，这里收掉 */
+  .dt-msg .tools { margin: 0; }
+  .dt-msg .stat-row { max-width: min(680px, 100%); }
+
+  /* 搜索视图顶部的 SSH 提示条：远程工作区没配 SSH 时提醒一句 */
+  .ssh-hint {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 8px; padding: 6px 9px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--hover);
+    font-size: 12px; color: var(--muted);
+  }
+  .ssh-hint .txt { flex: 1; min-width: 0; }
+  .ssh-hint.ok .txt { color: var(--ok); }
+  /* 消息里的文件路径：点一下在主窗口编辑器打开 */
+  .dt-file {
+    color: var(--accent); cursor: pointer; word-break: break-all;
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .dt-file:hover { text-decoration-thickness: 2px; }
+  /* 用户气泡里的路径：.dt-file 本身是 accent 蓝，而气泡底色也是 accent ——
+     同色等于隐形（这就是"我发的路径看不清"）。白字 + 下划线解决。
+     主窗口那边路径是 <a class="file-jump">，由 .row.user .bubble a 管。 */
+  .dt-msg.user .bubble .dt-file,
+  .row.user .bubble .dt-file { color: #fff; }
+  .dt-out {
+    flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: 8px 12px;
+    font: 12px/1.55 Consolas, "Cascadia Mono", monospace;
+    white-space: pre-wrap; word-break: break-all; scrollbar-gutter: stable;
+  }
+  .dt-composer {
+    flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border);
+  }
+  /* 聊天输入框的拖动条：压在这条 composer 的顶边上，8px 高正好盖住那道
+     border-top，鼠标靠近就透出 accent 色。终端那侧不需要放大，所以限定
+     #bdChat（.dt-composer 是两处共用的类）。 */
+  #bdChat > .dt-composer { position: relative; }
+  .dt-input-resize {
+    position: absolute; left: 0; right: 0; top: -4px; height: 8px;
+    cursor: ns-resize; background: transparent; z-index: 5;
+  }
+  .dt-input-resize:hover, .dt-input-resize.dragging {
+    background: var(--accent); opacity: .5;
+  }
+  /* 拖动写的是内联 px：窗口被缩小之后由这条兜底，别让输入框把日志区挤没。
+     50%（窗口高度的一半）那个上限在 37-detached.js 的 dtApplyInputH 里，
+     这条管的是"窗口自己变小"。 */
+  #dtInput { max-height: 50vh; }
+  /* 会话区的「跳到最新」：往上翻看历史时浮出来，贴底就藏起。
+     和 Logcat 工具栏那个 ⇣ 是同一个意思 —— 只是这边没有工具栏，
+     而且内容每秒都可能往下涨（生成中的回复），用浮动按钮最省地方。 */
+  #bdChat > .dt-down {
+    position: absolute; right: 18px;
+    /* 贴住输入区的上沿。高度由 37-detached.js 的 ResizeObserver 实测后写进
+       --dt-cm-h；拿不到时退回 96px（≈ 默认两行输入区的旧值 104px - 8px）。 */
+    bottom: calc(var(--dt-cm-h, 96px) + 8px);
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); font-size: 15px; line-height: 1; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .28); z-index: 6;
+  }
+  #bdChat > .dt-down:hover { background: var(--hover); border-color: var(--accent); }
+  #bdChat > .dt-down.hidden { display: none; }
+  .dt-inputrow { display: flex; gap: 8px; align-items: flex-end; }
+  /* 和主界面一致：上一排「压缩 + 新会话」、下一颗加宽的发送键 */
+  .dt-sendcol { display: flex; flex-direction: column; gap: 6px; min-width: 132px; }
+  .dt-sendcol .tbtn { width: 100%; }
+  .dt-composer textarea, .dt-composer input {
+    flex: 1; min-width: 0; resize: none; padding: 7px 9px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); outline: none; font-size: 13px;
+  }
+  .dt-composer textarea:focus, .dt-composer input:focus { border-color: var(--accent); }
+  /* 任务台：智能体 + 模型两个下拉**上下叠成一列**（.dt-selcol），这一列再和
+     输入框同一排。独立窗口横向也紧，两个下拉并排会把输入框挤成一条缝，
+     叠成一列更省地方。
+     用下拉而不是胶囊 —— 这一列放不下三个胶囊（主界面用胶囊，见 .modebar）。
+     限定 #bdChat：终端面板那排 .dt-inputrow 只有 input + 按钮，不该跟着变竖。 */
+  #bdChat .dt-selcol { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+  .dt-agentsel {
+    flex: 0 0 auto; width: 100%; max-width: 150px;
+    padding: 3px 6px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text);
+    font-size: 12px; font-family: inherit; outline: none; cursor: pointer;
+  }
+  .dt-agentsel:hover, .dt-agentsel:focus { border-color: var(--accent); }
+  .dt-agentsel.hidden { display: none; }
+  /* 模型下拉比智能体那个再宽一点：模型名基本都长（deepseek-v4.1-flash 之类），
+     132px 会把每个选项都截成 "deepseek-v4…"，三个网关的模型看起来一个样。
+     现在上下排列，两个统一 150px —— 一宽一窄的一列很难看。 */
+  .dt-modelsel { max-width: 150px; }
+  .dt-attn { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+  /* 发送排队：生成中再按回车不丢，排在这里等这一轮结束（同主界面 #sendQueue） */
+  .dt-queue {
+    margin: 0 0 7px; padding: 3px 6px 4px;
+    border: 1px dashed var(--border); border-radius: 8px;
+    background: var(--bg); max-height: 108px; overflow-y: auto;
+  }
+  .dt-queue.hidden { display: none; }
+  .dt-q-head { font-size: 11px; color: var(--muted); padding: 1px 2px 3px; }
+  .dt-q-row { display: flex; align-items: center; gap: 6px; padding: 1px 2px; }
+  .dt-q-n { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+  .dt-q-text {
+    flex: 1; min-width: 0; font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .dt-q-row.urgent .dt-q-n { color: var(--accent); }
+  .dt-q-row.urgent .dt-q-text { color: var(--accent); font-weight: 600; }
+  .dt-q-acts { flex: 0 0 auto; display: flex; gap: 4px; }
+  .dt-q-acts button {
+    font: inherit; font-size: 11px; padding: 1px 7px;
+    border-radius: 5px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  .dt-q-acts button:hover { background: var(--hover); }
+  .dt-q-acts button.danger { color: var(--danger); }
+  .dt-tools { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .dt-ico {
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 6px; padding: 1px 7px; font-size: 13px; line-height: 1.5;
+  }
+  .dt-ico:hover { background: var(--hover); color: var(--text); }
+  .dt-tip { font-size: 11px; color: var(--muted); }
+
+  /* ---------- 弹窗 ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 60; display: flex;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.45);
+  }
+  .card {
+    display: flex; flex-direction: column; width: min(760px, 94vw);
+    max-height: 88vh; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; box-shadow: 0 16px 50px rgba(0,0,0,.28);
+  }
+  .card-head {
+    display: flex; align-items: center; gap: 8px; padding: 11px 14px;
+    border-bottom: 1px solid var(--border); font-weight: 500;
+  }
+  /* diff 视图要宽一点才看得清（默认 760px 太挤） */
+  .card.diff-card { width: min(1180px, 96vw); max-height: 92vh; }
+  .diff-file {
+    font-size: 12px; color: var(--muted); padding: 8px 4px 2px;
+    border-top: 1px solid var(--border); margin-top: 8px;
+    font-family: Consolas, monospace;
+  }
+  .diff-hunk {
+    font-size: 11px; color: #58a6ff; background: rgba(88,166,255,.08);
+    padding: 2px 6px; margin-top: 6px; border-radius: 3px;
+    font-family: Consolas, monospace;
+  }
+  /* 并排对比：左=仓库版本（.diff-pane-l），右=本地（.diff-pane-r），中间 6px 拖动条。
+     ★ 两栏是**各自独立的滚动容器**：横向各滚各的（左栏某行长、右栏不跟着飘）；
+       纵向靠 JS 同步 scrollTop —— 纵向不能独立，一错行 diff 就没意义了。
+     ★ 行列结构不再是「一行一个三列 grid」：grid 的列宽由整个容器统一定，
+       所以以前既不能分别横向滚、也没法单独改左右宽度。现在每一栏是一棵
+       独立的 DOM 树（.diff-col），行与行之间互不牵连。
+     ★ 代码行不换行（`pre`），行高由 `--diff-line` **固定**：左右是两棵树，
+       只有每行高度恒定、且两侧逐行镜像，同一处改动才会落在同一条水平线上。 */
+  .diff-body {
+    --diff-line: 19px;
+    --diff-l: 50%;
+    flex: 1; min-height: 0; display: flex; align-items: stretch;
+  }
+  .diff-pane { min-width: 0; overflow: auto; }
+  /* 左栏宽度走 CSS 变量 —— 拖拖动条时只改这一个值，不用重排内容。 */
+  .diff-pane-l { flex: 0 0 auto; width: var(--diff-l); }
+  /* 右栏 flex:1：窗口变宽时右栏自动吃掉增量，不会在右侧留一条缝。 */
+  .diff-pane-r { flex: 1 1 0; }
+  .diff-col {
+    display: flex; flex-direction: column;
+    width: max-content; min-width: 100%;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12px; line-height: 1.55; tab-size: 4;
+  }
+  /* 一行：左栏是 [格子 | 中缝]，右栏只有 [格子]。两栏的每一行都固定等高。 */
+  .diff-row { display: flex; align-items: stretch; height: var(--diff-line); }
+  /* 文件头 / hunk 头 / 提示行：左右各放一份，右栏那份加 .diff-mirror 只占高度。
+     nowrap + 省略号是**必须**的：一旦折行，左窄右宽就会折成不同行数，
+     两栏高度从此差一行，后面每一行都错位。文件名放大在 title 里。 */
+  .diff-file, .diff-hunk, .diff-tip, .diff-fold {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .diff-mirror { visibility: hidden; }
+  /* 格子：行号 | 正文 两层 grid。列宽用 max-content 而不是 1fr ——
+     现在每栏自己决定宽度（.diff-col 是 max-content），1fr 会退化成 0。
+     正文 `white-space: pre`（不折行、保留缩进）；`overflow` 不能为 hidden ——
+     裁掉以后横向滚动条滚过去也是空白，等于没滚。 */
+  .diff-cell {
+    display: grid; grid-template-columns: 3.4ch max-content;
+    column-gap: 8px; padding: 0 8px; flex: 0 0 auto;
+    white-space: pre; word-break: normal;
+  }
+  .diff-cell .ln {
+    color: var(--muted); text-align: right; user-select: none;
+  }
+  /* 类名统一带 diff- 前缀：`.ctx` 是全局右键菜单，`.empty` 也会撞别的空态样式 */
+  /* 改色的底色从 .13 提到 .22、左条 2px→3px：截图反馈「红绿块在深色主题下
+     几乎看不出哪行变了」。再深就会盖住代码本身（尤其语法高亮的浅色 token）。 */
+  .diff-cell.diff-del {
+    background: rgba(248,81,73,.22);
+    box-shadow: inset 3px 0 0 rgba(248,81,73,.85);
+  }
+  .diff-cell.diff-add {
+    background: rgba(63,185,80,.22);
+    box-shadow: inset 3px 0 0 rgba(63,185,80,.85);
+  }
+  /* 对边没有对应行：留一条浅底 + 斜纹。
+     纯浅底和「空白行」分不出来，用户会以为那边就是空的；
+     斜纹是通用约定，一眼就知道「这一侧确实没有对应内容」。 */
+  .diff-cell.diff-empty {
+    background: rgba(127,127,127,.07);
+    background-image: repeating-linear-gradient(
+      45deg, rgba(127,127,127,.06) 0 6px, transparent 6px 12px);
+  }
+  /* 折叠条：⋯ 未改动 N 行，点击展开 ⋯。
+     nowrap + ellipsis 与 .diff-file / .diff-hunk 同一套规则 —— 折行会让
+     左右两栏差一行，后面每一行都错位。 */
+  .diff-fold {
+    color: var(--muted); font-size: 11px;
+    background: rgba(127,127,127,.08);
+    /* 上下虚线用 inset 阴影而不是 border：行高是 CSS 写死的 19px，
+       真加 border 会从内容区吃掉 2px（字号小，看着像被压扁）。 */
+    box-shadow: inset 0 1px 0 var(--border), inset 0 -1px 0 var(--border);
+    padding: 0 8px; cursor: pointer; user-select: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: Consolas, "Cascadia Mono", monospace;
+  }
+  .diff-fold:hover { color: var(--text); background: var(--hover); }
+  .diff-cell.diff-right { border-left: 1px solid var(--border); }
+  /* 中缝的 ◀ 放在「左栏右侧一条独立竖带」里，不再往左栏的行内塞。
+     行内那版的可见性全靠 `position: sticky; right: 0`：而行宽是 max-content
+     （一行能到几千 px），那块在正常流里早就在可视区外面，sticky 拉不回来 ——
+     表现就是箭头整排不见。另外每行插一块不透明背景，左栏右沿还会留一条色带。
+     竖带本身不滚（没有滚动条），箭头用绝对定位钉在里面；
+     竖向靠 .diff-gapcol 的 translateY 跟随左栏（svnDiffSyncCols 里写）。 */
+  .diff-gapbar {
+    flex: 0 0 22px; position: relative; overflow: hidden;
+    background: var(--bg);
+  }
+  /* 高度为 0：它只是个定位坐标系，箭头都绝对定位在里面，
+     超出竖带的部分由父级 overflow:hidden 裁掉（滚出去的箭头就看不见了）。 */
+  .diff-gapcol {
+    position: absolute; top: 0; left: 0; width: 100%;
+    will-change: transform;
+  }
+  /* 左右栏之间的拖动条：6px 太窄不好点，用负 margin 扩出热区。 */
+  .diff-bar {
+    flex: 0 0 6px; cursor: col-resize; background: var(--border);
+    position: relative; touch-action: none;
+  }
+  .diff-bar::after {
+    content: ""; position: absolute; inset: 0 -4px;   /* 热区左右各扩 4px */
+  }
+  .diff-bar:hover, .diff-bar.dragging { background: var(--accent); }
+  /* 拖动中别让浏览器顺手选中代码、也别把光标变成文本选择 */
+  body.diff-resizing { cursor: col-resize; user-select: none; }
+  /* 中缝那个「还原这一处」：别做成看不见的小点，要有边框、悬停变色。
+     top 由 JS 按左栏行实测位置写（svn.js 里 arrowJobs 那段），这里只管横向居中。 */
+  .diff-arrow {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    width: 18px; height: 18px; padding: 0; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--muted); font-size: 9px; line-height: 1;
+    cursor: pointer; opacity: .7;
+  }
+  .diff-arrow:hover {
+    color: var(--accent); border-color: currentColor; opacity: 1;
+    background: rgba(127,127,127,.12);
+  }
+  .diff-arrow:disabled { opacity: .25; cursor: default; }
+  /* 对比面板顶部的改动导航（↑ 上一处 / ↓ 下一处）。
+     diff 带全文上下文之后一个文件几百行，改动可能只有三处、散得很开，
+     没有按钮只能一路滚着找红绿。 */
+  .diff-nav {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted);
+  }
+  /* 对比面板分两层：外层不滚，顶上那条 ↑↓ 导航栏常驻，正文放进 .diff-scroll 自己滚。
+     以前是把导航条塞在正文里再 sticky —— sticky 只在"滚动容器就是父元素、
+     中间没有裁切"时成立，换一层容器就贴不住，表现就是滚两下箭头就没了。 */
+  .ed-diff.diff-host {
+    display: flex; flex-direction: column; overflow: hidden; padding: 0;
+  }
+  .ed-diff.diff-host > .diff-nav {
+    flex: 0 0 auto; padding: 8px 14px;
+    border-bottom: 1px solid var(--border); background: var(--bg);
+  }
+  .ed-diff.diff-host > .diff-scroll {
+    flex: 1; min-height: 0; overflow: hidden; padding: 0;
+    /* 自己不再滚：外层只管「上面一条说明 + 下面左右两栏」的竖向分配，
+       真正的滚动交给 .diff-pane-l / .diff-pane-r 各自处理。 */
+    display: flex; flex-direction: column;
+  }
+  /* 顶部那句说明（左=仓库版本、点 ◀ 还原……）常驻，不跟内容一起滚走。 */
+  .ed-diff.diff-host > .diff-head {
+    flex: 0 0 auto; padding: 8px 14px 6px;
+    font-size: 12px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .diff-nav button {
+    padding: 3px 10px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 12px;
+    line-height: 1.5; cursor: pointer;
+  }
+  .diff-nav button:hover { border-color: var(--accent); color: var(--accent); }
+  /* 跳到的那一处：左右两格各描一圈。用 outline 而不是 box-shadow ——
+     每个 .diff-cell 本身已经有 inset 阴影表示增/删，box-shadow 会把它盖掉。 */
+  .diff-cell.diff-focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .card-head .spacer { flex: 1; }
+  .card-head button { border: none; background: none; color: var(--muted); font-size: 16px; }
+  .card-body { flex: 1; overflow: auto; padding: 14px; }
+  .card-foot {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    border-top: 1px solid var(--border);
+  }
+  .card-foot .spacer { flex: 1; }
+  .card textarea {
+    width: 100%; min-height: 320px; border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; background: var(--bg); outline: none;
+    font: 13px/1.75 Consolas, "Cascadia Mono", monospace; resize: vertical;
+  }
+  .card input[type=text] {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 12px; background: var(--bg); outline: none;
+  }
+  .view-body {
+    margin: 0; white-space: pre; tab-size: 4; overflow: auto;
+    font: 13px/1.7 Consolas, "Cascadia Mono", monospace;
+  }
+  .qr-box { text-align: center; padding: 6px 0; }
+  .qr-box img {
+    width: 210px; height: 210px; background: #fff; padding: 8px; border-radius: 10px;
+  }
+
+  /* ---------- 右键菜单 ---------- */
+  .ctx {
+    position: fixed; z-index: 80; min-width: 178px; padding: 5px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 9px;
+    box-shadow: 0 8px 26px rgba(0,0,0,.2);
+  }
+  .ctx button {
+    display: block; width: 100%; text-align: left; padding: 7px 10px;
+    border: none; background: none; border-radius: 6px; font-size: 13px;
+  }
+  .ctx button:hover { background: var(--hover); }
+  .ctx .sep { height: 1px; background: var(--border); margin: 4px 2px; }
+  .ctx .title {
+    padding: 5px 10px; font-size: 11px; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+
+/* ---- 多标签页会话 ---- */
+.sess-tabs {
+  display: flex; align-items: stretch; gap: 2px;
+  overflow-x: auto; overflow-y: hidden;
+  padding: 0 6px; flex: 0 0 auto;
+  border-bottom: 1px solid var(--line);
+  min-height: 30px; scrollbar-width: thin;
+}
+.sess-tabs:empty { display: none; }
+.sess-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; cursor: pointer;
+  font-size: 12px; white-space: nowrap;
+  border: 1px solid transparent; border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--muted); max-width: 200px; flex: 0 0 auto;
+  user-select: none;
+}
+.sess-tab:hover { background: rgba(255,255,255,.05); color: inherit; }
+.sess-tab.active {
+  background: var(--panel-bg); border-color: var(--line); color: inherit;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.sess-tab .nm { overflow: hidden; text-overflow: ellipsis; }
+.sess-tab .x { opacity: .45; font-size: 14px; line-height: 1; border-radius: 3px; padding: 0 2px; }
+.sess-tab .x:hover { opacity: 1; background: rgba(255,255,255,.12); }
+
+.sess-panels { flex: 1 1 auto; min-height: 0; display: flex; }
+
+/* 惰性会话标签的占位。默认不拉历史（刷新时几十个会话全拉会卡很久），
+   切过去只看到这一行提示，单击这里 / 右键标签 →「加载会话历史」才真加载。 */
+.lazy-hint {
+  margin: auto; padding: 22px 26px; text-align: center;
+  color: var(--muted); font-size: 13px; line-height: 1.9;
+  border: 1px dashed rgba(128,128,128,.35); border-radius: 10px;
+  cursor: pointer; user-select: none;
+}
+.lazy-hint:hover { border-color: var(--accent); color: var(--text); }
+.lazy-hint .dim { font-size: 12px; opacity: .75; }
+.sess-body {
+  flex: 1 1 auto; min-height: 0; min-width: 0; flex-direction: column;
+  /* 默认隐藏：switchTab 会把它设成内联 display:flex。
+     不这么写的话，首次渲染时 N 个会话面板会同时展开，
+     既叠成一团，又要同时铺 N 份历史，页面直接卡死。 */
+  display: none;
+}
+.sess-panel {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  padding: 14px 0 6px;
+  display: flex; flex-direction: column; position: relative;
+  /* 滚到头之后别把滚动链甩给父级：父级本来就不能滚，传上去只是白跑一遍命中测试 */
+  overscroll-behavior: contain;
+}
+/* 按需渲染（跳过屏外内容的布局与绘制）**必须落在消息行上**，不能落在滚动容器
+   自己身上 —— 容器永远在视口里，写在它上面的 content-visibility:auto 一次都
+   跳不过去，反倒把整个滚动容器 containment 化（滚动从合成层降级成主线程滚动，
+   滑起来发涩）。这里是「滑动还是卡」的根因，之前那版就写错在了上一层。
+   真正要跳过的是屏外的消息行：会话聊到几十轮以后，一行 markdown 就能拆出
+   上百个 p/li/table/pre/span 节点。
+   `auto <长度>` 里的 auto 是「记住这一行上次的实际高度」—— 滚过一次之后
+   不再按 96px 估，滚动条不会被反复校正，也不会出现滑到一半位置被顶走。 */
+.sess-panel > .row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}
+/* Ctrl+F / 系统查找需要搜到屏外内容（Chrome 本就会把它临时渲染出来），
+   关掉只用于对比测试。 */
+.sess-panel.cv-off > .row { content-visibility: visible; }
+/* 「加载更早」插到顶部的那批行，先按真实内容渲染一次（JS 加 300ms 后摘掉）：
+   首次出现的行没被记住高度，只能按上面那个 96px 估 —— 往回翻时内容会在
+   脚下"长出来"，把正在看的位置顶走。渲染过一次之后尺寸就记住了，
+   再交回自动跳过也不会跳。 */
+.sess-panel > .row.cv-hold { content-visibility: visible; }
+
+/* ---------- 会话管理弹窗里的两个表 ---------- */
+/* 表 1「当前会话」= 标签栏正开着的；表 2「历史会话」= 全量但没开的。
+   叉掉只让会话从表 1 消失，它仍在表 2 里，随时点回来 —— 所以标题必须
+   写清楚是两个不同的表，否则用户会以为"叉掉就等于删了"。 */
+.sess-sec-title {
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  padding: 10px 2px 4px; margin-top: 4px;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+/* 第一段标题别把弹窗顶部顶太高 */
+.sess-sec-title:first-child { margin-top: 0; padding-top: 0; }
+.sess-sec-empty {
+  font-size: 12px; color: var(--muted);
+  padding: 8px 2px 12px;
+}

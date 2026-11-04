@@ -1,0 +1,43 @@
+{
+  "base_url": "https://xxx/chat/completions",
+  "api_key": "sk-your-key-here",
+  "model": "deepseek-v4.1-flash",
+  "reasoning_effort": "high",
+  "models": [
+    "default",
+    "deepseek-v4.1-flash",
+    "deepseek-v4-pro"
+  ],
+  "endpoints": [
+    {
+      "id": "custom-gw",
+      "name": "自定义网关",
+      "base_url": "http://192.0.2.10:8086/v1",
+      "models": [
+        "deepseek-flash",
+        "deepseek-v4-pro"
+      ],
+      "api_key": ""
+    }
+  ],
+  "system_prompt": "你是一个简洁、直接的中文助手。回答尽量短，必要时用条目。",
+  "password": "your-password",
+  "auth_disabled": false,
+  "host": "127.0.0.1",
+  "port": 8000,
+  "context_tokens": 100000,
+  "max_tokens": 8192,
+  "model_output": {
+    "deepseek-v4.1-flash": 393216
+  },
+  "max_agent_steps": 100,
+  "fs_roots": [
+    "*"
+  ],
+  "attachment_max_bytes": 120000,
+  "max_attachments": 20,
+  "image_max_chars": 4000000,
+  "search_api_key": "",
+  "search_api_base": "https://api.deepseek.com",
+  "remote_rg": ""
+}
