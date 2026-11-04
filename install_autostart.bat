@@ -8,7 +8,7 @@ rem    install_autostart.bat uninstall   remove task(s) + stop the watchdog
 rem    install_autostart.bat status      show task / process / port state
 rem    (no argument)                     same as install, plus pause at the end
 rem
-rem  Port: same default as start.bat. Override with the 2nd argument
+rem  Port: 8000 by default (same as start.bat). Override with the 2nd argument
 rem  or the AGENT_PORT environment variable, e.g.
 rem    install_autostart.bat install 8000
 rem    set AGENT_PORT=8000 ^&^& install_autostart.bat install
@@ -31,7 +31,7 @@ rem Only pause when double-clicked (no arguments). With an action argument the
 rem script is being driven by automation and must not block on a keypress.
 if not "%~1"=="" set "NO_PAUSE=1"
 
-rem -- port: 2nd argument > AGENT_PORT env > default set below ----------------
+rem -- port: 2nd argument > AGENT_PORT env > 8000 ----------------------------
 if not "%~2"=="" (
   echo %~2| findstr /r "^[0-9][0-9]*$" >nul
   if not errorlevel 1 set "AGENT_PORT=%~2"
@@ -235,7 +235,7 @@ exit /b 0
 
 :do_status
 rem Show the port the installed task actually uses (from the launcher), not
-rem just this console's default -- otherwise "status" lies after a non-default-port install.
+rem just this console's default -- otherwise "status" lies after a 8000 install.
 set "STATUS_PORT=%AGENT_PORT%"
 if exist "%WRAP%" (
   for /f "tokens=2 delims==" %%a in ('findstr /i "AGENT_PORT" "%WRAP%"') do set "STATUS_PORT=%%a"
@@ -262,10 +262,9 @@ rem  healthy while the watchdog never starts.
 rem ===========================================================================
 :find_pyw
 set "PYW="
-if exist "%USERPROFILE%\.workbuddy\binaries\python\versions\3.14.3\pythonw.exe" (
-  set "PYW=%USERPROFILE%\.workbuddy\binaries\python\versions\3.14.3\pythonw.exe"
-)
 rem Real per-user installs: %LOCALAPPDATA%\Programs\Python\Python3xx\
+rem (There used to be a hard-coded path to the developer's own IDE runtime
+rem  here -- useless on any other machine and a leak of that environment.)
 if not defined PYW (
   for /d %%d in ("%LOCALAPPDATA%\Programs\Python\Python3*") do (
     if not defined PYW if exist "%%~d\pythonw.exe" set "PYW=%%~d\pythonw.exe"
@@ -313,8 +312,11 @@ rem
 rem  Exit code is useless as a health signal: the Store alias and the PyManager
 rem  launcher both exit 0 while doing nothing. So ask the interpreter to print
 rem  its own major/minor version and read that; unreadable output counts as
-rem  unusable. 3.8 is the floor -- the sources use nothing newer (no match
-rem  statements), and 3.8.10 is the last build with a Win7 installer.
+rem  unusable. 3.10 is the floor -- src\agent_handoff.py annotates "dict | None"
+rem  without "from __future__ import annotations", a TypeError on 3.8 / 3.9.
+rem  (3.8.10 used to be listed here as the floor only because it is the last
+rem  build with a Win7 installer; that is a different question -- see
+rem  installtowin7.bat for the Win7 path.)
 rem ===========================================================================
 :verify_pyw
 if not defined PYW exit /b 0
@@ -329,13 +331,13 @@ if exist "%VTMP%" (
     echo %%a| findstr /r "^[0-9][0-9]*$" >nul
     if not errorlevel 1 (
       if %%a GEQ 4 set "PYOK=1"
-      if %%a EQU 3 if %%b GEQ 8 set "PYOK=1"
+      if %%a EQU 3 if %%b GEQ 10 set "PYOK=1"
     )
   )
   del "%VTMP%" >nul 2>&1
 )
 if not defined PYOK (
-  echo        [warn] installed but not a usable Python 3.8+: %VPY%
+  echo        [warn] installed but not a usable Python 3.10+: %VPY%
   set "PYW="
 )
 exit /b 0

@@ -2,7 +2,7 @@
 # Web AI Agent - Linux 启动脚本（局域网可访问）
 #
 # 用法：
-#   ./start.sh                 # 后台启动，监听 0.0.0.0:<端口>（默认值见下方 PORT）
+#   ./start.sh                 # 后台启动，监听 0.0.0.0:8000（默认）
 #   ./start.sh 8000            # 后台启动，换端口（等价于 AGENT_PORT=8000）
 #   ./start.sh fg              # 前台启动：日志打在终端，Ctrl+C 停
 #   ./start.sh stop            # 停止后台服务
@@ -12,7 +12,7 @@
 # 后台模式的 stdout/stderr 落到 .ai/server.log（可用 AGENT_LOG=... 改）
 # 服务自己的业务日志仍在 <工作区>/.ai/agent.log
 #
-# 访问：http://<本机IP>:<端口>
+# 访问：http://<本机IP>:8000
 set -u
 
 # 始终以脚本所在目录为工作目录

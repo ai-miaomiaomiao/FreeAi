@@ -17,7 +17,7 @@
     不能只看 PID 存在与否 —— Windows 上进程退出后 PID 会被复用，也可能
     出现僵尸。这里三重判断，任一不满足就当死了：
       1. 子进程对象 poll() 不为 None（我们拉起的那条，最准）
-      2. 端口 PORT（见本文件顶部的端口设置）有 LISTENING
+      2. 端口 8000 有 LISTENING
       3. .ai/server.pid 里的 PID 真的还活着（web_agent 自己的单实例锁）
     额外要求连续失败 2 次才动手，避免重启瞬间的"端口还没起来"被误判成
     死亡，把刚拉起的进程又杀一遍。
@@ -138,7 +138,7 @@ def _port_listening(port: int = PORT, host: str = "127.0.0.1") -> bool:
     """端口上有人在听吗。
 
     用 connect 而不是 bind：bind 成功只说明"没人占"，不代表"服务起来了"；
-    能连上才说明确实有一个 HTTP 服务在 PORT 上答应。
+    能连上才说明确实有一个 HTTP 服务在 8000 上答应。
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(1.0)
@@ -248,7 +248,7 @@ def _log_child_error(head: str) -> None:
 def _config_port() -> int:
     """读 agent_config.json 里的 port；读不到返回 0。
 
-    本文件、`tray.py`、`start.bat` 都只认 AGENT_PORT 环境变量（缺省值见本文件顶部 PORT），
+    本文件、`tray.py`、`start.bat` 都只认 AGENT_PORT 环境变量（缺省 8000），
     而服务真正的端口来自 agent_config.json。两者一旦不一致，就是
     「服务监听 A、这里探 B」→ 每次探测都失败 → 无限重启（历史故障，
     见 md/开机自启-托盘-应用模式.md 第一节）。
@@ -404,7 +404,7 @@ def _launch() -> subprocess.Popen | None:
 
 
 def _wait_ready(proc: subprocess.Popen | None, timeout: float = START_TIMEOUT) -> bool:
-    """等它把 PORT 真正监听起来。"""
+    """等它把 8000 真正监听起来。"""
     end = time.time() + timeout
     while time.time() < end:
         if proc is not None and proc.poll() is not None:
@@ -525,7 +525,7 @@ def _launch_tray() -> subprocess.Popen | None:
 def check_once(proc: subprocess.Popen | None = None) -> tuple[bool, subprocess.Popen | None]:
     """检查一次。返回 (是否活着, 用到的子进程对象)。
 
-    存活判定见文件头注释；三个条件里 **端口是最硬的证据** —— 只要 PORT 上
+    存活判定见文件头注释；三个条件里 **端口是最硬的证据** —— 只要 8000 上
     有服务在答应，就算 PID 文件写错了、子进程句柄丢了，也不该重启。
     """
     if proc is not None and proc.poll() is not None:

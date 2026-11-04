@@ -266,7 +266,7 @@ function tabTitleFor(sid) {
 
 // 下拉里每一项的取值：`端点id::模型名`，默认网关用 `::模型名`。
 // 为什么把端点编进 value：模型名属于某个网关（见 src/agent_endpoints.py），
-// 光传模型名切不到自建网关 —— 那正是"加了下拉却还是只能用腾讯那几个"的原因。
+// 光传模型名切不到自建网关 —— 那正是"加了下拉却还是只能用默认那几个"的原因。
 function modelKey(endpoint, model) {
   return (endpoint || "") + "::" + model;
 }

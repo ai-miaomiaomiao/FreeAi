@@ -45,7 +45,7 @@ if not exist "%ROOT%src\web_agent.py" (
 )
 
 rem ---------------------------------------------------------------------------
-rem 0. Port. Same convention as start.bat:  argument > AGENT_PORT > default
+rem 0. Port. Same convention as start.bat:  argument > AGENT_PORT > 8000
 rem ---------------------------------------------------------------------------
 if not "%~1"=="" (
   echo %~1| findstr /r "^[0-9][0-9]*$" >nul
@@ -53,7 +53,7 @@ if not "%~1"=="" (
 )
 rem Accept ONLY a pure number. Anything else - empty, a stray space left by
 rem "set AGENT_PORT= &", junk inherited from a parent shell - falls back to
-rem the default below. Without this check every netstat filter degrades to ":",
+rem 8000. Without this check every netstat filter below degrades to ":",
 rem which matches the entire connection table.
 rem "echo(" instead of "echo ": it prints an empty line for an empty value
 rem instead of the literal text "ECHO is off.".

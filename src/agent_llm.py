@@ -143,7 +143,7 @@ MAX_SUMMARY_CHUNKS = 12       # 最多分几块摘要：再多就先合并中间
 def stream_completion(messages: list, cfg: dict):
     """调用上游并逐块产出文本增量。
 
-    上游（<网关地址>/chat/completions）强制要求 stream=true，
+    上游（<网关>/v2/chat/completions）强制要求 stream=true，
     所以统一走流式；非流式接口由调用方把增量拼接起来。
     """
     # 统一走 `_post_with_retry`：以前这里自己 requests.post 且不重试、读超时
@@ -368,7 +368,7 @@ def _system_proxy() -> str:
 
 
 def _split_host_port(addr: str):
-    """把 `http://1.2.3.4:<port>` / `1.2.3.4:<port>` 拆成 (host, port)。"""
+    """把 `http://1.2.3.4:8000` / `1.2.3.4:8000` 拆成 (host, port)。"""
     addr = (addr or "").strip()
     if not addr:
         return "", 0
@@ -428,7 +428,7 @@ def _post_headers(cfg: dict) -> dict:
     """上游请求头。
 
     **api_key 为空就不发 Authorization**：以前固定发 `Bearer `（空串），
-    自建网关（如本机 207）虽然不校验、只当它是脏数据，但把它发给任何网关都是
+    自建网关（如本机搭的那个）虽然不校验、只当它是脏数据，但把它发给任何网关都是
     "带了个空的凭据"，某些实现会直接 401。端点表里 `api_key: ""` 的写法
     （见 src/agent_endpoints.py）就是靠这个分支生效的。
     """
@@ -626,7 +626,7 @@ def _stream_once(messages: list, cfg: dict, tools=None, should_stop=None):
     """
     body = {"model": cfg["model"], "messages": messages, "stream": True}
     # max_tokens 必须显式给：不传时全靠网关默认值，而各家的默认值差异很大
-    # （这类网关的默认值普遍偏小）。默认值一小，长回答就会被
+    # （上游网关默认偏小）。默认值一小，长回答就会被
     # finish_reason=length 截断 —— 用户看到的正是「说半句就没了」。
     # 取值走 output_limit：model_output[当前模型] > max_tokens > 8192。
     # 别在这里重新解析 cfg["max_tokens"] —— 那就把「按模型配」这条路又堵死了。

@@ -5392,7 +5392,7 @@ function openDetachedBoard() {
     });
   }
   // 主界面入口：主窗口被关掉之后，任务台这边没有任何回去的路
-  // （之前只能自己敲 http://127.0.0.1:<端口>/ 或翻收藏夹）。
+  // （之前只能自己敲 http://127.0.0.1:8000/ 或翻收藏夹）。
   const mainBtn = $("bdMain");
   if (mainBtn) {
     mainBtn.classList.remove("hidden");

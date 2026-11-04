@@ -31,7 +31,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-#: 读不到 agent_config.json 时的兜底端口（与 start.bat 的默认端口保持一致）。
+#: 读不到 agent_config.json 时的兜底端口（start.bat 用的是 8000）。
 DEFAULT_PORT = 8000
 DEFAULT_TIMEOUT = 900.0
 
@@ -154,10 +154,10 @@ class Client:
                 "  服务没起？先跑 start.bat / ./start.sh，再试。\n"
                 "  端口不对？在 agent_config.json 里核对 host/port，"
                 "或用 AGENT_URL=http://127.0.0.1:端口 覆盖。\n"
-                "  Linux 用 ./start.sh 起的服务默认端口可能和 agent_config.json"
-                " 里写的 port 不一样：\n"
-                "    要么按脚本实际端口 export AGENT_PORT=实际端口，"
-                "要么 AGENT_URL=http://127.0.0.1:实际端口 ai \"你好\"。" % (self.base, e.reason))
+                "  Linux 用 ./start.sh 起的服务默认听 8000（AGENT_PORT），"
+                "而 agent_config.json 里通常写 8000：\n"
+                "    要么 export AGENT_PORT=8000，"
+                "要么 AGENT_URL=http://127.0.0.1:8000 ai \"你好\"。" % (self.base, e.reason))
         except OSError as e:
             raise ConnectError("连不上 %s（%s）" % (self.base, e))
 

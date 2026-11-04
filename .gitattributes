@@ -1,0 +1,24 @@
+# 统一换行符，避免 Windows / Linux 之间来回 checkout 出问题。
+#
+# *.bat 必须是 CRLF：cmd 按字节读取批处理文件，LF 换行下 if (...) / for
+# 多行块和 goto 标签会被解析错乱，表现为莫名其妙的 "is not recognized"。
+# 仓库里原本就有几个 LF 的 .bat，靠本地文件状态偶然能跑，clone 到别人机器上
+# 不一定；从版本控制层面钉死。
+
+* text=auto
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.sh   text eol=lf
+*.py   text eol=lf
+*.pyw  text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+
+# 二进制，别做换行转换
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.so   binary
+*.zip  binary

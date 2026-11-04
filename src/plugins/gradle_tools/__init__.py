@@ -464,7 +464,7 @@ def do_projects(args: dict, ctx: dict) -> dict:
 #:
 #: 为什么要在软件侧重试：动态端口范围挪到 60000 之后、保留段也不重叠时，
 #: `DatagramSocket(0)` 仍会偶发失败。根因已经不是「保留段压住动态范围」，而是
-#: **瞬时的出向连接占用** —— 本机这个服务自己的出向连接会把 60000-65535 里
+#: **瞬时的出向连接占用** —— 本机 8000 服务自己的出向连接会把 60000-65535 里
 #: 一批端口压在 TIME_WAIT（`netstat` 里成片的 `:60073-60096`）。
 #: TIME_WAIT 是**会自己过期**的状态，等一秒再起一个新 daemon 就能过去，
 #: 不该让用户手点第二次。只在识别为 bind 撞车时重跑，编译错误一次都不重跑。
@@ -514,15 +514,28 @@ def do_tasks(args: dict, ctx: dict) -> dict:
 
     timeout = _explicit_timeout(args)
 
+    # JDK：**必须和 do_run 走同一套**（参数 > 界面存的选择 > 工程自带 jbr17）。
+    # 以前这里什么都没传，子进程继承服务进程的环境，于是「列任务」用各人机器的
+    # 系统 JAVA_HOME、「跑任务」用工程自带 jbr17 —— 同一台机器、同一个工程，
+    # 两个按钮用的不是同一个 java。系统 JDK 和 Gradle 版本对不上的人（换台机器、
+    # 换个同事就撞上）点 ↻ 直接报 JDK 错，而「跑任务」却是好的，极难联想到这块。
+    jdk = _jdk_of(project, args)
+    jdk_arg = _gradle.java_home_arg(jdk["path"], "argv") if jdk["exists"] else ""
+
+    env = dict(os.environ)
+    env.update(_gradle.jdk_env(jdk))
+
     # 一律 --no-daemon：见 _gradle.NO_DAEMON_ARG（daemon 启动时那个随机 UDP
     # 端口的 bind 会偶发失败，整个构建还没开始就挂）。
     cmd = [*_gradle_cmd(project), "tasks", "--all", "--console=plain",
            _gradle.NO_DAEMON_ARG]
+    if jdk_arg:
+        cmd.append(jdk_arg)
     try:
         # timeout=None = 不限时，跑完为止（理由见 _explicit_timeout）
         # run_stoppable：列任务在 100+ 模块的工程上要好几分钟，
         # 以前是 subprocess.run，那几分钟里用户点停止完全没用（详见 _shared/proc.py）。
-        p, bind_fails = _run_gradle(cmd, project, timeout=timeout, ctx=ctx)
+        p, bind_fails = _run_gradle(cmd, project, timeout=timeout, env=env, ctx=ctx)
     except FileNotFoundError:
         return {"ok": False, "summary": "找不到 gradle", "content": hint or "命令不可用"}
     if p.stopped:
@@ -543,7 +556,20 @@ def do_tasks(args: dict, ctx: dict) -> dict:
     #    （`* What went wrong:` 那两行）被埋在一堆噪音后面，还指错了方向。
     diag = _gradle.diagnose_gradle_output(out, p.returncode)
     if diag["failed"]:
-        body = _gradle.format_diagnosis(diag)
+        # 第一行先写「这次用的是哪份 java」。列任务列不出来时，第一个要排除的就是
+        # JDK，而这条信息以前只在 data 里（界面不显示），用户只能靠猜。
+        body = "本次 JDK：" + _gradle.jdk_description(jdk) + "\n\n"
+        body += _gradle.format_diagnosis(diag)
+        # java 系的报错 + 工程里没有自带 JBR = 这次用的是系统 JAVA_HOME。
+        # 不说这句的话，hints 里「本工具支持 java_home 参数」会让人以为插件
+        # 已经指定过 JDK 了（列任务这条路以前压根没读这个参数）。
+        if diag["kind"] in ("java-version", "java-too-old", "java-home",
+                            "toolchain-jdk") and not jdk["set"]:
+            body += ("\n\n工程里没有 %s，所以这次列任务用的是本机系统 JAVA_HOME：%s。"
+                     "换一份 JDK 再试：界面 JDK 下拉里选（选择会存盘，下次列任务照用），"
+                     "或传 java_home 参数（action=jdks 列出本机可用的 JDK）。"
+                     % (_gradle.DEFAULT_JAVA_HOME,
+                        os.environ.get("JAVA_HOME") or "（未设）"))
         if diag["kind"] == "bind" or _gradle.is_bind_flake(out):
             # 已经自动重试过 bind_fails 次才到这里，必须说清次数，
             # 否则用户会以为「又让我重跑一遍」是插件什么都没做。
@@ -554,6 +580,7 @@ def do_tasks(args: dict, ctx: dict) -> dict:
                 "content": body,
                 "data": {"failed": True, "kind": diag["kind"], "why": diag["why"],
                          "java": diag["java"], "gradleVersion": diag["version"],
+                         "jdk": _gradle.jdk_description(jdk),
                          "returncode": p.returncode, "bindFails": bind_fails,
                          "command": " ".join(cmd), "project": project,
                          "raw": out[-4000:]}}
@@ -584,6 +611,7 @@ def do_tasks(args: dict, ctx: dict) -> dict:
                             "认出任务列表 —— 多半是输出格式和预期不一致。\n\n"
                             "原始输出（末尾 2000 字）：\n" + out[-2000:]),
                 "data": {"failed": False, "returncode": p.returncode,
+                         "jdk": _gradle.jdk_description(jdk),
                          "command": " ".join(cmd), "project": project,
                          "raw": out[-4000:]}}
 
@@ -596,7 +624,8 @@ def do_tasks(args: dict, ctx: dict) -> dict:
         _gradle.tasks_file_of(project),
         {"at": int(time.time() * 1000), "project": project, "tasks": tasks})
 
-    lines = [f"工程：{project}", f"共 {total} 个任务，分 {len(groups)} 组", ""]
+    lines = [f"工程：{project}", f"共 {total} 个任务，分 {len(groups)} 组",
+             f"JDK：{_gradle.jdk_description(jdk)}", ""]
     if bind_fails:
         # 重试成功必须显式说出来：这是「机器偶发撞端口」的唯一线索，
         # 静默重试等于把根因藏起来，下回换个任务照样撞。
@@ -615,6 +644,7 @@ def do_tasks(args: dict, ctx: dict) -> dict:
     return {"ok": True, "summary": f"{total} 个任务",
             "content": "\n".join(lines).rstrip()[:MAX_TEXT],
             "data": {"project": project, "groups": groups, "tree": tree,
+                     "jdk": _gradle.jdk_description(jdk),
                      "total": total}}
 
 

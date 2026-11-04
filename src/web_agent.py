@@ -107,10 +107,10 @@ DEFAULTS = {
     #   base_url  网关地址，写 `http://host:port/v1` 或完整 `.../chat/completions` 都行
     #   models    这个网关支持的模型名
     #   api_key   省略 = 沿用上面的全局 api_key；显式写 "" = 这个网关**不带** key
-    #             （本地自建网关大多不校验，把腾讯的 key 发过去只是白送凭据）
+    #             （本地自建网关大多不校验，把上游的 key 发过去只是白送凭据）
     #
     # 为什么端点要单独一张表、而不是复用一个 base_url：模型名是跟着网关走的。
-    # 「切到 207 的 deepseek-flash」和「切到腾讯的 deepseek-v4.1-flash」是两件事，
+    # 「切到自建网关的 deepseek-flash」和「切到上游的 deepseek-v4.1-flash」是两件事，
     # 只换 model 不换 base_url，就会拿错误的名字打到错误的网关（上游回一个
     # 跟真实原因无关的 404），所以模型和端点必须一起切。
     "endpoints": [],
@@ -5999,7 +5999,7 @@ class Handler(BaseHTTPRequestHandler):
         `1 (ssh/workspace) + 1 (chat/active) + N (sessions，一个工作区一个) +
         1 (term/jobs)` 个请求，N 个左右就是十几个；而服务端是 HTTP/1.0、
         没有 keep-alive，**每个请求一条新 TCP**，跑几个会话之后
-        `Get-NetTCPConnection -LocalPort <端口>` 上 TIME_WAIT 堆到一千多，
+        `Get-NetTCPConnection -LocalPort 8000` 上 TIME_WAIT 堆到一千多，
         整个界面发涩（实测 1707 个 TimeWait / 5 个 Established）。
         合并成一个请求之后这层开销基本消失。
 
@@ -6281,9 +6281,9 @@ class Handler(BaseHTTPRequestHandler):
         """切模型，必要时**连网关一起切**。
 
         为什么端点也要一起换：模型名属于某个网关（见 agent_endpoints 的说明）。
-        前端那个下拉里，`207::deepseek-flash` 和 `::deepseek-v4.1-flash`
-        是同一件事的两种取值 —— 选了前者就必须把 base_url 改到 207，
-        否则会拿 deepseek-flash 这个名字去打腾讯网关，上游回的错跟真实原因无关。
+        前端那个下拉里，`custom-gw::deepseek-flash` 和 `::deepseek-v4.1-flash`
+        是同一件事的两种取值 —— 选了前者就必须把 base_url 改到自建网关，
+        否则会拿 deepseek-flash 这个名字去打上游网关，上游回的错跟真实原因无关。
 
         `endpoint` 省略 = 默认网关（老前端、老调用点行为不变）。
         """
@@ -6301,7 +6301,7 @@ class Handler(BaseHTTPRequestHandler):
             allowed = list(ep.get("models") or [])
 
         # 换端点前把默认网关那套值留一份：从自定义端点切回默认时要用它，
-        # 否则 base_url 会一直是 207 的（切回默认也无法复原）。
+        # 否则 base_url 会一直是自建网关的（切回默认也无法复原）。
         if not target["endpoint"]:
             base, key = agent_endpoints.defaults(self.cfg)
             self.cfg["default_base_url"] = base
@@ -6327,8 +6327,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             # 存**全局**，不存进工作区的 .ai/save.json ——
             # 模型是全局偏好，换个项目不该跟着变（跟助理一个道理）。
-            # endpoint 必须一起存：只存 model 的话，重启后模型名是 207 的、
-            # base_url 却是配置文件里的腾讯网关，怎么点都是报错。
+            # endpoint 必须一起存：只存 model 的话，重启后模型名是自建网关的、
+            # base_url 却是配置文件里的上游网关，怎么点都是报错。
             patch_global_ui({"model": model, "endpoint": target["endpoint"]})
         except Exception as e:
             print(f"[warn] 保存模型选择失败：{e}")
@@ -6949,7 +6949,7 @@ class Handler(BaseHTTPRequestHandler):
              再调 start.bat"；
           2. 用 DETACHED_PROCESS 把它拉起来 —— 它没有控制台、不属于本服务的
              进程树，我们被杀了它照样跑。
-        启动器自己 sleep 掉的那几秒，正好覆盖"本进程被杀 → 端口释放"这段
+        启动器自己 sleep 掉的那几秒，正好覆盖"本进程被杀 → 8000 端口释放"这段
         空窗，避免 start.bat 里的 waitport 一上来就撞到还没释放的端口。
         """
         bat = os.path.join(ROOT_DIR, "start.bat")
@@ -9857,7 +9857,7 @@ def main() -> int:
                 patch_global_ui({"model": cfg["model"]})
                 print(f"[agent] 模型选择已迁到全局（原存在工作区的 .ai/{STATE_FILE}）")
         # 端点和模型是**一对**，必须一起恢复：只恢复 model 的话，重启后模型名是
-        # 207 的、base_url 还指着配置文件里的默认网关，怎么问都报错。
+        # 自建网关的、base_url 还指着配置文件里的默认网关，怎么问都报错。
         # 已经切到自定义端点时，先把默认网关那套值留一份（同一个进程内切回去要用）。
         if _ui.get("endpoint"):
             if "default_base_url" not in cfg:

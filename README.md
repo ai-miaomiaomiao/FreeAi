@@ -18,7 +18,7 @@
 
 ## 快速开始
 
-环境要求：Python 3.8 以上，Windows / Linux / macOS 均可。全部只用标准库 —— 没有 `requirements.txt`，不用 `pip install`；唯一的 Node 脚本是 `tools/check_frontend.js`（前端静态检查，可选）。
+环境要求：**Python 3.10 或更高**，Windows / Linux / macOS 均可。门槛不是 3.8：`src/agent_handoff.py` 用了 `dict | None` 这类 PEP 604 注解，却没有 `from __future__ import annotations`，而它在 `src/web_agent.py` 启动时就被 import —— 3.8 / 3.9 上会在 import 阶段直接抛 `TypeError`，表现成"服务起不来"。全部只用标准库 —— 没有 `requirements.txt`，不用 `pip install`；唯一的 Node 脚本是 `tools/check_frontend.js`（前端静态检查，可选）。
 
 ```bash
 # 1. 准备配置
@@ -34,13 +34,48 @@ start.bat
 
 浏览器打开对应地址，用配置里的 `password` 登录：`start.bat` 是 `http://127.0.0.1:<端口>`，`start.sh` 是 `http://<本机IP>:<端口>`。监听地址两边不一样：`start.sh` 固定导出 `AGENT_HOST=0.0.0.0`（局域网可直接访问），`start.bat` 不碰 host，走 `agent_config.json` 里的 `host`（默认 `127.0.0.1`）。启动时窗口/终端里会打印实际端口。
 
-端口优先级：脚本参数 > `AGENT_PORT` 环境变量 > 脚本默认值（`8000`，与 `src/web_agent.py` 的内置默认一致；各脚本开头另有 `set AGENT_PORT` 行可改）。导出情况：`start.sh` 导出 `AGENT_HOST` + `AGENT_PORT`，`start.bat` / `app.bat` / `watchdog.bat` / `install_autostart.bat` 只导出 `AGENT_PORT`。只要设了对应环境变量，就压过 `agent_config.json` 里的 `host` / `port`（见 `src/web_agent.py` 的 `load_config`）；想用配置文件里的值，就直接 `python src/web_agent.py`。
+端口默认值分三处，别记混：
 
-各脚本注释里的 `start.bat 8000` / `./start.sh 8000` 只是「传参」的书写示例，`8000` 恰好就是默认值，写它等于没改端口；真要换端口得传别的数字，比如 `start.bat 9000`。这条优先级也意味着：`agent_config.json` 里若写了非 8000 的 `port`，用 `start.bat` / `start.sh` 启动会被脚本导出的 `AGENT_PORT=8000` 覆盖掉。
+| 启动方式 | 默认端口 | 出处 |
+| --- | --- | --- |
+| `start.bat`（及 `app.bat` / `watchdog.bat` / `install_autostart.bat`） | `8000` | 脚本里 `set "AGENT_PORT=8000"` |
+| `start.sh` | `8000` | 脚本里 `PORT="${AGENT_PORT:-8000}"` |
+| `python src/web_agent.py` | `8000` | `src/web_agent.py` 的内置默认 |
+
+优先级：脚本参数 > `AGENT_PORT` 环境变量 > 脚本默认值。导出情况：`start.sh` 导出 `AGENT_HOST` + `AGENT_PORT`，`start.bat` / `app.bat` / `watchdog.bat` / `install_autostart.bat` 只导出 `AGENT_PORT`。只要设了对应环境变量，就压过 `agent_config.json` 里的 `host` / `port`（见 `src/web_agent.py` 的 `load_config`）。
+
+这条优先级有个直接后果：**`agent_config.json` 里写 `port` 对启动脚本无效** —— 走 `start.bat` 实际监听 8000，走 `start.sh` 是 8000，配置文件里的值被脚本导出的 `AGENT_PORT` 顶掉。要换端口就传参（`start.bat 9000` / `./start.sh 9000`）或先设环境变量；想用配置文件里的 `host` / `port`，就直接 `python src/web_agent.py`。
 
 Windows 上 `watchdog.bat` 会在进程退出后自动拉起；`install_autostart.bat` 注册开机自启。
 
 命令行用法（服务需已在运行）：`ai.bat` / `ai.sh` 转交 `src/cli.py` —— `ai "看下这个工程"`、`ai -s "接着聊"`、`ai -m debug "..."`、`ai --help`。把项目根加进 `PATH` 后可直接敲 `ai`。
+
+## 启动排错
+
+### 双击 `start.bat` 就报「源码有语法错误」
+
+那句是脚本里的**固定文案**，不等于源码真的坏了。新版 `start.bat` 会先打印一行 `解释器: <路径> (Python x.y)`，再把 `compileall` 的原样输出贴出来，并按内容给出判断：
+
+| 屏幕上的判断 | 真实原因 | 怎么办 |
+| --- | --- | --- |
+| `找不到可用的 Python 3.10 或更高版本`（可能附「找到过 …，但版本太低」） | 没装 Python / 版本低于 3.10 / PATH 里只有应用商店别名 | 装 3.10+，安装时勾 `Add python.exe to PATH` |
+| `当前目录不可写（编译缓存 src\__pycache__ 建不了）` | 项目放在 `C:\Program Files` 之类的只读目录，或被安全软件拦了写盘 | 挪到用户目录下，或用管理员身份运行 |
+| 出现 `SyntaxError: … (文件, 第 N 行)` | 真语法错误 | 按提示改那一行 |
+| 什么都不像 | 环境问题 | 把整屏内容（含第一行 `解释器:`）截图发出来 |
+
+`%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe` 是微软商店的「应用执行别名」，**不是 Python**：执行它返回 9009、什么也不做，而 `where python` 往往把它排在第一。旧版脚本直接拿它跑 `compileall`，退出码非 0 就被报成"源码有语法错误"，真实原因被 `>nul 2>&1` 吞掉。现在 `start.bat` / `watchdog.bat` / `install_autostart.bat` 都会显式跳过含 `\WindowsApps\` 的候选，并且每个候选都要真能跑、版本够才算数。
+
+### 报「端口 xxxx 还被占着」
+
+`start.bat` 只杀 `web_agent.py` 自己的残留进程，端口被别的程序占着时它会列出占用者的 PID 并退出。关掉那个进程（`netstat -ano | findstr :8000` 也能看），或换个端口：`start.bat 8000`。
+
+### Win7 上能不能跑
+
+安装脚本 `installtowin7.bat` / `startinwin7.bat` 面向 Win7，但 Win7 能装的最后一个 Python 是 **3.8.10**，低于本项目要求的 3.10 —— 那套脚本装出来的环境会在启动时 import 失败。要在 Win7 上用，得自己解决 3.10+ 的解释器（官方没有 Win7 安装包），否则只能改源码去掉 PEP 604 注解后再试。
+
+### 别把 `.bat` 转成 LF
+
+`start.bat` 里有 30 多处 `if (...)` / `for /f` 多行块，换行必须 CRLF，否则 cmd 解析错乱、报出一堆看不懂的错。仓库用 `.gitattributes` 钉住了 `*.bat text eol=crlf`，别用编辑器手动改成 LF 再提交。
 
 ## 目录结构
 
@@ -78,7 +113,7 @@ docs/                开发者文档：插件开发.md（给前端用的接口�
 | `AGENT_BASE_URL` | `base_url` |
 | `AGENT_MODEL` | `model` |
 | `AGENT_PASSWORD` | `password` |
-| `AGENT_HOST` / `AGENT_PORT` | `host` / `port`（启动脚本会主动导出，见上一节） |
+| `AGENT_HOST` / `AGENT_PORT` | `host` / `port`（启动脚本会主动导出，见「快速开始」里的端口说明） |
 
 > 更早的版本这三项用过另一套变量名，现已统一到 `AGENT_API_KEY` / `AGENT_BASE_URL` / `AGENT_MODEL`，**旧名不再读取、也没有兼容别名**。如果你在系统环境或启动脚本里设过旧名，请改成上面的新名，否则表现为「没有配置 api_key，无法调用上游」而起不来。
 
